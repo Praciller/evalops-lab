@@ -12,9 +12,9 @@ JUDGE_OUTPUT_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "label": {"type": "string", "enum": ["HALLUCINATED", "GROUNDED"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidence": {"type": "number"},
         "unsupported_claims": {"type": "array", "items": {"type": "string"}},
-        "reason": {"type": "string", "maxLength": 300},
+        "reason": {"type": "string"},
     },
     "required": ["label", "confidence", "unsupported_claims", "reason"],
     "additionalProperties": False,

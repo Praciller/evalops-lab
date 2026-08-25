@@ -129,6 +129,20 @@ def _error_class(status_code: int) -> str:
     return "API_ERROR"
 
 
+def _safe_error_summary(response: ProviderHTTPResponse) -> str | None:
+    if 200 <= response.status_code < 300:
+        return None
+    error = response.body.get("error")
+    details: list[str] = []
+    if isinstance(error, Mapping):
+        for key in ("status", "type", "code"):
+            value = error.get(key)
+            if isinstance(value, (str, int)) and len(str(value)) <= 80:
+                details.append(f"{key}={value}")
+    suffix = f" ({', '.join(details)})" if details else ""
+    return f"Provider returned HTTP {response.status_code}{suffix}."
+
+
 def _transport_error(error: Exception) -> str:
     if isinstance(error, TimeoutError):
         return "API_TIMEOUT"
@@ -215,9 +229,7 @@ def _common_call(
         request_id=response.headers.get("x-request-id"),
         latency_ms=latency_ms,
         error_class=None if api_success else _error_class(response.status_code),
-        safe_error_summary=(
-            None if api_success else f"Provider returned HTTP {response.status_code}."
-        ),
+        safe_error_summary=_safe_error_summary(response),
     )
 
 
