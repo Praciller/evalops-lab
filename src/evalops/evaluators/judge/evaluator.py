@@ -30,7 +30,11 @@ class JudgeEvaluationTrace(BaseModel):
     example_id: str
     provider: str
     requested_model: str
+    gateway: str | None = None
+    catalog_model_name: str | None = None
     returned_model: str | None = None
+    returned_provider: str | None = None
+    backend_revision: str | None = None
     prediction: HallucinationPrediction | None = None
     decision: JudgeDecision | None = None
     api_success: bool = False
@@ -50,6 +54,7 @@ class JudgeEvaluationTrace(BaseModel):
     tool_calls_present: bool = False
     usage_metadata_present: bool = False
     usage: dict[str, int | float | str] | None = None
+    quota: dict[str, int | float | str] | None = None
     request_id: str | None = None
     latency_ms: float | None = None
     error_class: str | None = None
@@ -104,6 +109,10 @@ class LLMJudgeEvaluator:
             "provider": self.provider.provider_name,
             "base_url_identifier": self.provider.base_url_identifier,
             "model": self.provider.model,
+            "gateway": getattr(self.provider, "gateway", None),
+            "catalog_model_name": getattr(self.provider, "catalog_model_name", None),
+            "backend_revision": getattr(self.provider, "backend_revision", None),
+            "routing_immutable": getattr(self.provider, "routing_immutable", None),
             "prompt_version": JUDGE_PROMPT_VERSION,
             "prompt_sha256": JUDGE_PROMPT_SHA256,
             "schema_version": JUDGE_SCHEMA_VERSION,
@@ -139,7 +148,10 @@ class LLMJudgeEvaluator:
         structured_status = (
             "STRUCTURED_OUTPUT_RUNTIME_FAILED" if not call.api_success else "PARSE_FAILED"
         )
-        if parse_result is not None:
+        if call.api_success and not call.assistant_content:
+            error_class = "PARSE_ERROR"
+            safe_error_summary = "Judge content was empty."
+        elif parse_result is not None:
             structured_status = "PASS" if parse_result.success else "PARSE_FAILED"
             decision = parse_result.decision
             if decision is not None:
@@ -155,7 +167,11 @@ class LLMJudgeEvaluator:
             example_id=example_id,
             provider=call.provider,
             requested_model=call.requested_model,
+            gateway=call.gateway,
+            catalog_model_name=call.catalog_model_name,
             returned_model=call.returned_model,
+            returned_provider=call.returned_provider,
+            backend_revision=call.backend_revision,
             prediction=prediction,
             decision=decision,
             api_success=call.api_success,
@@ -175,6 +191,7 @@ class LLMJudgeEvaluator:
             tool_calls_present=call.tool_calls_present,
             usage_metadata_present=call.usage_metadata_present,
             usage=call.usage,
+            quota=call.quota,
             request_id=call.request_id,
             latency_ms=call.latency_ms,
             error_class=error_class,

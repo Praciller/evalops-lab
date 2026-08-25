@@ -8,6 +8,18 @@ from evalops.providers.health import (
     model_diversity_ready,
     select_openrouter_model,
 )
+from evalops.providers.okmd import (
+    OKMDClient,
+    OKMDModel,
+    OKMDQuota,
+    QuotaGateResult,
+    estimate_pilot_tokens,
+    model_family,
+    parse_models_response,
+    parse_quota,
+    select_okmd_candidates,
+    validate_quota_gate,
+)
 
 __all__ = [
     "CompletionAssessment",
@@ -16,4 +28,14 @@ __all__ = [
     "classify_http_status",
     "model_diversity_ready",
     "select_openrouter_model",
+    "OKMDClient",
+    "OKMDModel",
+    "OKMDQuota",
+    "QuotaGateResult",
+    "estimate_pilot_tokens",
+    "model_family",
+    "parse_models_response",
+    "parse_quota",
+    "select_okmd_candidates",
+    "validate_quota_gate",
 ]

@@ -23,12 +23,12 @@ from evalops.evaluators.judge.prompt import (
     JUDGE_PROMPT_SHA256,
     JUDGE_PROMPT_VERSION,
     JUDGE_SCHEMA_VERSION,
+    render_judge_prompt,
 )
 from evalops.evaluators.judge.providers import (
     GeminiProviderAdapter,
-    GroqProviderAdapter,
     JudgeOutputMode,
-    OpenRouterProviderAdapter,
+    OKMDProviderAdapter,
     SamplingConfig,
 )
 from evalops.models.hallucination import (
@@ -51,11 +51,22 @@ from evalops.pilot.execution import (
 )
 from evalops.pilot.models import PilotManifest, PilotRunRecord
 from evalops.pilot.sampling import build_consistency_manifest, build_pilot_manifest
+from evalops.providers.okmd import (
+    OKMDClient,
+    OKMDModel,
+    discovery_snapshot_payload,
+    estimate_pilot_tokens,
+    model_family,
+    parse_models_response,
+    parse_quota,
+    select_okmd_candidates,
+    validate_quota_gate,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OFFICIAL_PROVIDER_NAMES = ("gemini", "groq")
-OPENROUTER_FALLBACK_NAME = "openrouter"
-OPENROUTER_FALLBACK_MODEL = "liquid/lfm-2.5-2.6b:free"
+OFFICIAL_PROVIDER_NAMES = ("gemini", "okmd")
+OKMD_MAX_CANDIDATES = 3
+OKMD_OUTPUT_MODE = JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION
 DEFAULT_MANIFEST = REPO_ROOT / "datasets" / "manifests" / "ragtruth-llm-judge-pilot-v1.json"
 DEFAULT_STATE = REPO_ROOT / "reports" / "phase5a-pilot-state.json"
 DEFAULT_REPORT = REPO_ROOT / "reports" / "phase5a-pilot-v1.json"
@@ -63,20 +74,21 @@ DEFAULT_PREFLIGHT = REPO_ROOT / "reports" / "phase5a-preflight.json"
 DEFAULT_DATA_DIR = REPO_ROOT / "datasets" / "external" / "ragtruth"
 HEURISTIC_ARTIFACT = REPO_ROOT / "reports" / "ragtruth-test-heuristic-v1.json"
 HHEM_ARTIFACT = REPO_ROOT / "reports" / "ragtruth-test-hhem-v1.json"
+OKMD_DISCOVERY_SNAPSHOT = REPO_ROOT / "reports" / "okmd-model-discovery.json"
 
 
 def estimate_request_count(pilot_size: int, *, include_consistency: bool) -> int:
     """Estimate preflight, base, and optional consistency requests."""
 
-    return 4 + (2 * pilot_size) + (48 if include_consistency else 0)
+    return 9 + (2 * pilot_size) + (48 if include_consistency else 0)
 
 
 def preflight_request_count(previous_external_requests: int) -> int:
-    """Add the four required synthetic provider calls to a repair budget."""
+    """Add discovery, Gemini, and three bounded OKMD candidate attempts."""
 
     if previous_external_requests < 0:
         raise ValueError("previous external request count cannot be negative")
-    return previous_external_requests + 4
+    return previous_external_requests + 9
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -139,11 +151,11 @@ def _sampling() -> SamplingConfig:
 def _provider_evaluators(
     provider_names: Sequence[str] = OFFICIAL_PROVIDER_NAMES,
     output_modes: Mapping[str, str] | None = None,
+    okmd_model: Mapping[str, str] | None = None,
 ) -> dict[str, LLMJudgeEvaluator]:
     environment_names = {
         "gemini": "GEMINI_API_KEY",
-        "groq": "GROQ_API_KEY",
-        OPENROUTER_FALLBACK_NAME: "OPENROUTER_API_KEY",
+        "okmd": "OKMD_API_KEY",
     }
     keys = {
         provider: os.environ.get(environment_names[provider], "").strip()
@@ -163,15 +175,14 @@ def _provider_evaluators(
             adapter = GeminiProviderAdapter(
                 keys[provider], output_mode=mode or JudgeOutputMode.JSON_SCHEMA_STRICT
             )
-        elif provider == "groq":
-            adapter = GroqProviderAdapter(
-                keys[provider], output_mode=mode or JudgeOutputMode.JSON_SCHEMA_STRICT
-            )
-        elif provider == OPENROUTER_FALLBACK_NAME:
-            adapter = OpenRouterProviderAdapter(
+        elif provider == "okmd":
+            if not okmd_model or not okmd_model.get("model_id"):
+                raise RuntimeError("OKMD selected model metadata is missing")
+            adapter = OKMDProviderAdapter(
                 keys[provider],
-                model=OPENROUTER_FALLBACK_MODEL,
-                output_mode=mode or JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION,
+                model=okmd_model["model_id"],
+                catalog_model_name=okmd_model.get("name", "unavailable"),
+                output_mode=mode or OKMD_OUTPUT_MODE,
             )
         else:
             raise RuntimeError(f"unsupported Phase 5A provider: {provider}")
@@ -195,8 +206,22 @@ SYNTHETIC_PREFLIGHT_CASES = (
 )
 
 
-def _preflight_case_result(evaluator: LLMJudgeEvaluator, case: Mapping[str, str]) -> dict[str, Any]:
+def _preflight_case_result(
+    evaluator: LLMJudgeEvaluator,
+    case: Mapping[str, str],
+    *,
+    allow_one_regeneration: bool = False,
+) -> dict[str, Any]:
     trace = evaluator.evaluate_with_trace(case["context"], case["response"], case["example_id"])
+    request_count = 1
+    if (
+        allow_one_regeneration
+        and trace.api_success
+        and not trace.parse_success
+        and trace.error_class in {"PARSE_ERROR", "SCHEMA_VALIDATION_ERROR"}
+    ):
+        trace = evaluator.evaluate_with_trace(case["context"], case["response"], case["example_id"])
+        request_count = 2
     return {
         "example_id": case["example_id"],
         "expected_label": case["expected_label"],
@@ -213,6 +238,12 @@ def _preflight_case_result(evaluator: LLMJudgeEvaluator, case: Mapping[str, str]
         "actual_output_mode": trace.actual_output_mode,
         "provider_schema_enforced": trace.provider_schema_enforced,
         "local_schema_validated": trace.local_schema_validated,
+        "gateway": trace.gateway,
+        "catalog_model_name": trace.catalog_model_name,
+        "returned_provider": trace.returned_provider,
+        "backend_revision": trace.backend_revision,
+        "quota": trace.quota,
+        "request_count": request_count,
     }
 
 
@@ -221,8 +252,16 @@ def _provider_preflight_result(
     cases: Sequence[Mapping[str, str]],
     *,
     diagnostics: Mapping[str, Any] | None = None,
+    allow_one_regeneration: bool = False,
 ) -> dict[str, Any]:
-    case_results = [_preflight_case_result(evaluator, case) for case in cases]
+    case_results = [
+        _preflight_case_result(
+            evaluator,
+            case,
+            allow_one_regeneration=allow_one_regeneration,
+        )
+        for case in cases
+    ]
     return {
         "provider": evaluator.provider.provider_name,
         "model": evaluator.provider.model,
@@ -240,42 +279,8 @@ def _provider_preflight_result(
         "parse_success_count": sum(item["parse_success"] for item in case_results),
         "cases": case_results,
         "diagnostics": dict(diagnostics or {}),
+        "requests_used": sum(item["request_count"] for item in case_results),
     }
-
-
-def _groq_diagnostics() -> tuple[dict[str, Any], int, str | None]:
-    basic_evaluator = _provider_evaluators(
-        ("groq",), {"groq": JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION}
-    )["groq"]
-    basic = _preflight_case_result(basic_evaluator, SYNTHETIC_PREFLIGHT_CASES[0])
-    diagnostics: dict[str, Any] = {"basic_completion": basic}
-    request_count = 1
-    if not basic["api_success"]:
-        return diagnostics, request_count, None
-
-    object_evaluator = _provider_evaluators(
-        ("groq",), {"groq": JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION}
-    )["groq"]
-    object_result = _preflight_case_result(object_evaluator, SYNTHETIC_PREFLIGHT_CASES[0])
-    diagnostics["json_object"] = object_result
-    request_count += 1
-
-    strict_evaluator = _provider_evaluators(
-        ("groq",), {"groq": JudgeOutputMode.JSON_SCHEMA_STRICT}
-    )["groq"]
-    strict_result = _preflight_case_result(strict_evaluator, SYNTHETIC_PREFLIGHT_CASES[0])
-    diagnostics["strict_schema"] = strict_result
-    request_count += 1
-
-    selected_mode: str | None = None
-    if strict_result["api_success"] and strict_result["parse_success"]:
-        selected_mode = JudgeOutputMode.JSON_SCHEMA_STRICT
-    elif object_result["api_success"] and object_result["parse_success"]:
-        selected_mode = JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION
-    elif basic["api_success"] and basic["parse_success"]:
-        selected_mode = JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION
-    diagnostics["selected_output_mode"] = selected_mode
-    return diagnostics, request_count, selected_mode
 
 
 def _configuration_hash(evaluator: LLMJudgeEvaluator) -> str:
@@ -283,7 +288,44 @@ def _configuration_hash(evaluator: LLMJudgeEvaluator) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _preflight(*, prior_external_requests: int, prior_repair_requests: int) -> dict[str, Any]:
+def _okmd_pilot_estimate(data_dir: Path, manifest_path: Path) -> tuple[PilotManifest, int]:
+    dataset = _load_dataset(data_dir)
+    manifest = _load_or_create_manifest(dataset, manifest_path, sample_only=False)
+    if len(manifest.example_ids) != 120:
+        raise RuntimeError(
+            f"pilot manifest must contain 120 examples, found {len(manifest.example_ids)}"
+        )
+    selected_ids = set(manifest.example_ids)
+    prompts = [
+        render_judge_prompt(example.source_context, example.response)
+        for example in dataset.examples
+        if example.example_id in selected_ids
+    ]
+    if len(prompts) != 120:
+        raise RuntimeError(
+            "frozen pilot manifest is not fully present in the official TEST dataset"
+        )
+    return manifest, estimate_pilot_tokens(prompts, output_tokens=256, safety_margin=0.25)
+
+
+def _okmd_candidate_is_non_gemini(candidate: OKMDModel, result: Mapping[str, Any]) -> bool:
+    observed = []
+    for case in result.get("cases", []):
+        for value in (case.get("returned_provider"), case.get("returned_model")):
+            if isinstance(value, str) and value:
+                observed.append(model_family(value))
+    if not observed:
+        observed.append(model_family(candidate))
+    return all(family != "Gemini" for family in observed)
+
+
+def _preflight(
+    *,
+    prior_external_requests: int,
+    prior_repair_requests: int,
+    data_dir: Path,
+    manifest_path: Path,
+) -> dict[str, Any]:
     call_count = 0
     results: dict[str, Any] = {}
     output_modes: dict[str, str] = {}
@@ -292,66 +334,102 @@ def _preflight(*, prior_external_requests: int, prior_repair_requests: int) -> d
         ("gemini",), {"gemini": JudgeOutputMode.JSON_SCHEMA_STRICT}
     )["gemini"]
     gemini_result = _provider_preflight_result(gemini_evaluator, SYNTHETIC_PREFLIGHT_CASES)
-    call_count += len(SYNTHETIC_PREFLIGHT_CASES)
+    call_count += gemini_result["requests_used"]
     results["gemini"] = gemini_result
     if gemini_result["api_success_count"] == 2 and gemini_result["parse_success_count"] == 2:
         output_modes["gemini"] = JudgeOutputMode.JSON_SCHEMA_STRICT
 
-    groq_diagnostics, groq_calls, groq_mode = _groq_diagnostics()
-    call_count += groq_calls
-    results["groq"] = {
-        "provider": "groq",
-        "model": "openai/gpt-oss-20b",
-        "base_url_identifier": "api.groq.com/openai/v1",
-        "diagnostics": groq_diagnostics,
-        "requested_output_mode": groq_mode,
-        "actual_output_mode": groq_mode,
-        "provider_schema_enforced": groq_mode == JudgeOutputMode.JSON_SCHEMA_STRICT,
-        "local_schema_validated": True,
-        "api_success_count": 0,
-        "parse_success_count": 0,
-        "cases": [],
-    }
-    if groq_mode is not None:
-        groq_evaluator = _provider_evaluators(("groq",), {"groq": groq_mode})["groq"]
-        groq_result = _provider_preflight_result(
-            groq_evaluator, SYNTHETIC_PREFLIGHT_CASES, diagnostics=groq_diagnostics
+    okmd_key = os.environ.get("OKMD_API_KEY", "").strip()
+    if not okmd_key:
+        raise RuntimeError(
+            "required provider credential environment variable is missing: OKMD_API_KEY"
         )
-        call_count += len(SYNTHETIC_PREFLIGHT_CASES)
-        results["groq"] = groq_result
-        output_modes["groq"] = groq_mode
-
-    selected_providers = ["gemini"] + (["groq"] if "groq" in output_modes else [])
-    if (
-        "groq" not in output_modes
-        and "gemini" in output_modes
-        and os.environ.get("OPENROUTER_API_KEY", "").strip()
-    ):
-        openrouter_evaluator = _provider_evaluators(
-            (OPENROUTER_FALLBACK_NAME,),
-            {OPENROUTER_FALLBACK_NAME: JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION},
-        )[OPENROUTER_FALLBACK_NAME]
-        openrouter_result = _provider_preflight_result(
-            openrouter_evaluator,
+    discovery_requests = 0
+    if OKMD_DISCOVERY_SNAPSHOT.is_file():
+        snapshot = json.loads(OKMD_DISCOVERY_SNAPSHOT.read_text(encoding="utf-8"))
+        catalog = parse_models_response(snapshot)
+    else:
+        client = OKMDClient(okmd_key)
+        catalog = client.discover_models()
+        _write_json(OKMD_DISCOVERY_SNAPSHOT, discovery_snapshot_payload(catalog))
+        discovery_requests = 1
+    candidates = select_okmd_candidates(catalog, max_candidates=OKMD_MAX_CANDIDATES)
+    manifest, estimated_tokens = _okmd_pilot_estimate(data_dir, manifest_path)
+    del manifest
+    call_count += discovery_requests
+    candidate_results: list[dict[str, Any]] = []
+    selected_model: dict[str, str] | None = None
+    selected_okmd_result: dict[str, Any] | None = None
+    selected_quota_gate: dict[str, Any] | None = None
+    for candidate in candidates:
+        model_info = {"model_id": candidate.model_id, "name": candidate.name}
+        evaluator = _provider_evaluators(("okmd",), {"okmd": OKMD_OUTPUT_MODE}, model_info)["okmd"]
+        result = _provider_preflight_result(
+            evaluator,
             SYNTHETIC_PREFLIGHT_CASES,
-            diagnostics={"fallback_reason": "groq_basic_completion_blocked"},
+            allow_one_regeneration=True,
         )
-        call_count += len(SYNTHETIC_PREFLIGHT_CASES)
-        results[OPENROUTER_FALLBACK_NAME] = openrouter_result
+        call_count += result["requests_used"]
+        result["requested_model_id"] = candidate.model_id
+        result["catalog_model_name"] = candidate.name
+        result["requested_model_family"] = model_family(candidate)
+        result["model_diversity"] = (
+            "PASS" if _okmd_candidate_is_non_gemini(candidate, result) else "FAIL_GEMINI_BACKEND"
+        )
+        quota_values = [case.get("quota") for case in result["cases"] if case.get("quota")]
+        quota = parse_quota(quota_values[-1]) if quota_values else None
+        result["quota"] = quota.__dict__ if quota is not None else None
+        result["quota_gate"] = None
+        candidate_results.append(result)
         if (
-            openrouter_result["api_success_count"] == 2
-            and openrouter_result["parse_success_count"] == 2
+            result["api_success_count"] == 2
+            and result["parse_success_count"] == 2
+            and result["model_diversity"] == "PASS"
         ):
-            selected_providers = ["gemini", OPENROUTER_FALLBACK_NAME]
-            output_modes[OPENROUTER_FALLBACK_NAME] = JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION
+            if quota is not None:
+                gate = validate_quota_gate(quota, estimated_tokens=estimated_tokens)
+                result["quota_gate"] = gate.__dict__
+                if gate.status == "PASS":
+                    selected_model = model_info
+                    selected_okmd_result = result
+                    selected_quota_gate = gate.__dict__
+                    output_modes["okmd"] = OKMD_OUTPUT_MODE
+                    break
+            else:
+                result["quota_gate"] = {
+                    "status": "OKMD_QUOTA_INSUFFICIENT_FOR_120",
+                    "estimated_tokens": estimated_tokens,
+                    "remaining_tokens": None,
+                }
 
+    if selected_okmd_result is not None:
+        results["okmd"] = selected_okmd_result
+    else:
+        results["okmd"] = (
+            candidate_results[-1]
+            if candidate_results
+            else {
+                "provider": "okmd",
+                "cases": [],
+                "api_success_count": 0,
+                "parse_success_count": 0,
+            }
+        )
+    selected_providers = (
+        ["gemini", "okmd"] if selected_model is not None and "gemini" in output_modes else []
+    )
     repair_requests = prior_repair_requests + call_count
     config_hashes: dict[str, str] = {}
-    for provider in selected_providers:
-        evaluator = _provider_evaluators((provider,), {provider: output_modes[provider]})[provider]
-        config_hashes[provider] = _configuration_hash(evaluator)
+    if "gemini" in output_modes:
+        config_hashes["gemini"] = _configuration_hash(
+            _provider_evaluators(("gemini",), output_modes)["gemini"]
+        )
+    if selected_model is not None:
+        config_hashes["okmd"] = _configuration_hash(
+            _provider_evaluators(("okmd",), output_modes, selected_model)["okmd"]
+        )
     return {
-        "schema_version": "phase5a-preflight-v2",
+        "schema_version": "phase5a-preflight-v3",
         "prompt_version": JUDGE_PROMPT_VERSION,
         "prompt_sha256": JUDGE_PROMPT_SHA256,
         "schema_version_judge": JUDGE_SCHEMA_VERSION,
@@ -360,10 +438,23 @@ def _preflight(*, prior_external_requests: int, prior_repair_requests: int) -> d
         "repair_external_requests": repair_requests,
         "external_requests": prior_external_requests + repair_requests,
         "preflight_requests": call_count,
-        "selected_providers": selected_providers if len(selected_providers) == 2 else [],
+        "selected_providers": selected_providers,
         "output_modes": output_modes,
         "provider_config_hashes": config_hashes,
         "providers": results,
+        "okmd_model_discovery": {
+            "snapshot": str(OKMD_DISCOVERY_SNAPSHOT.relative_to(REPO_ROOT)),
+            "catalog_count": len(catalog),
+            "candidates_found": [
+                {"model_id": model.model_id, "name": model.name, "family": model_family(model)}
+                for model in candidates
+            ],
+        },
+        "okmd_candidates": candidate_results,
+        "okmd_selection": selected_model,
+        "okmd_pilot_token_estimate": estimated_tokens,
+        "okmd_quota_gate": selected_quota_gate,
+        "model_diversity": "PASS" if selected_model is not None else "BLOCKED",
     }
 
 
@@ -380,18 +471,19 @@ def _prior_preflight_requests(path: Path) -> int:
 
 
 def _prior_repair_requests(path: Path) -> int:
+    values: list[int] = []
     ledger = path.with_name("phase5a-repair-ledger.json")
     if ledger.is_file():
         payload = json.loads(ledger.read_text(encoding="utf-8"))
         value = payload.get("repair_external_requests", 0) if isinstance(payload, dict) else 0
         if isinstance(value, int) and 0 <= value <= 300:
-            return value
+            values.append(value)
     if path.is_file():
         payload = json.loads(path.read_text(encoding="utf-8"))
-        value = payload.get("prior_repair_requests", 0) if isinstance(payload, dict) else 0
+        value = payload.get("repair_external_requests", 0) if isinstance(payload, dict) else 0
         if isinstance(value, int) and 0 <= value <= 300:
-            return value
-    return 0
+            values.append(value)
+    return max(values, default=0)
 
 
 def _validate_preflight(path: Path) -> dict[str, Any]:
@@ -405,6 +497,10 @@ def _validate_preflight(path: Path) -> dict[str, Any]:
         or not isinstance(payload.get("selected_providers"), list)
         or len(payload.get("selected_providers", [])) != 2
         or payload.get("selected_providers", [None])[0] != "gemini"
+        or payload.get("selected_providers", [None, None])[1] != "okmd"
+        or payload.get("model_diversity") != "PASS"
+        or not isinstance(payload.get("okmd_quota_gate"), dict)
+        or payload["okmd_quota_gate"].get("status") != "PASS"
     ):
         raise RuntimeError("preflight artifact is missing a valid repaired-provider gate")
     for provider in payload["selected_providers"]:
@@ -464,17 +560,30 @@ def _provider_provenance(
             if record.trace.returned_model is not None
         }
     )
+    returned_providers = sorted(
+        {
+            record.trace.returned_provider
+            for record in records
+            if record.trace.returned_provider is not None
+        }
+    )
+    quotas = [record.trace.quota for record in records if record.trace.quota is not None]
     return {
         "provider": evaluator.provider.provider_name,
+        "gateway": getattr(evaluator.provider, "gateway", None),
         "base_url_identifier": evaluator.provider.base_url_identifier,
         "requested_model": evaluator.provider.model,
+        "catalog_model_name": getattr(evaluator.provider, "catalog_model_name", None),
         "returned_models": returned_models,
-        "model_revision": None,
+        "returned_providers": returned_providers,
+        "backend_revision": getattr(evaluator.provider, "backend_revision", "unavailable"),
+        "model_revision": getattr(evaluator.provider, "backend_revision", "unavailable"),
         "prompt_version": JUDGE_PROMPT_VERSION,
         "prompt_sha256": JUDGE_PROMPT_SHA256,
         "schema_version": JUDGE_SCHEMA_VERSION,
         "output_mode": evaluator.config["output_mode"],
         "routing_immutable": getattr(evaluator.provider, "routing_immutable", None),
+        "latest_quota": quotas[-1] if quotas else None,
         "sampling": evaluator.config["sampling"],
         "dataset_revision": manifest.dataset_revision,
         "pilot_manifest_version": manifest.manifest_version,
@@ -504,7 +613,11 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         for example in dataset.examples
         if example.example_id in set(manifest.example_ids)
     }
-    evaluators = _provider_evaluators(selected_providers, preflight["output_modes"])
+    evaluators = _provider_evaluators(
+        selected_providers,
+        preflight["output_modes"],
+        preflight.get("okmd_selection"),
+    )
     budget = RequestBudget(300)
     budget.requests_used = int(preflight["repair_external_requests"])
     state = PilotStateStore(args.state)
@@ -514,6 +627,7 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         {name: evaluator.evaluate_with_trace for name, evaluator in evaluators.items()},
         state,
         budget,
+        parse_regenerations={"okmd": 1},
     )
     ground_truth = {record.example_id: record.human_label for record in manifest.records}
     metadata = {record.example_id: {"task_type": record.task_type} for record in manifest.records}
@@ -631,7 +745,11 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
         for example in dataset.examples
         if example.example_id in set(consistency.example_ids)
     }
-    evaluators = _provider_evaluators(selected_providers, report.get("output_modes", {}))
+    evaluators = _provider_evaluators(
+        selected_providers,
+        report.get("output_modes", {}),
+        report.get("okmd_selection"),
+    )
     budget = RequestBudget(300)
     budget.requests_used = current_requests
     repeated: dict[str, list[PilotRunRecord]] = {provider: [] for provider in selected_providers}
@@ -646,6 +764,7 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
             repeat_state,
             budget,
             max_retries=0,
+            parse_regenerations={"okmd": 1},
         )
         for record in repeat_records:
             repeated[record.provider].append(record)
@@ -711,6 +830,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         payload = _preflight(
             prior_external_requests=prior_external_requests,
             prior_repair_requests=prior_repair_requests,
+            data_dir=args.data_dir,
+            manifest_path=args.manifest,
         )
         _write_json(args.preflight_artifact, payload)
         print(

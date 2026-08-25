@@ -10,12 +10,14 @@ from evalops.evaluators.judge.models import JudgeDecision, JudgeLabel, JudgePars
 from evalops.evaluators.judge.providers import (
     GeminiProviderAdapter,
     GroqProviderAdapter,
+    OKMDProviderAdapter,
     SamplingConfig,
 )
 
 __all__ = [
     "GeminiProviderAdapter",
     "GroqProviderAdapter",
+    "OKMDProviderAdapter",
     "JudgeDecision",
     "JudgeEvaluationError",
     "JudgeEvaluationTrace",

@@ -94,6 +94,7 @@ def run_provider_pilot(
     *,
     max_retries: int = 2,
     retry_sleep: Callable[[float], None] = time.sleep,
+    parse_regenerations: Mapping[str, int] | None = None,
 ) -> list[PilotRunRecord]:
     """Evaluate exact manifest IDs sequentially with bounded transient retries."""
 
@@ -111,10 +112,19 @@ def run_provider_pilot(
                 continue
             context, response = examples[example_id]
             retry_count = 0
+            regeneration_count = 0
             while True:
                 budget.reserve()
                 trace = evaluator(context, response, example_id)
-                attempt = retry_count + 1
+                if (
+                    trace.prediction is None
+                    and trace.api_success
+                    and trace.error_class in {"PARSE_ERROR", "SCHEMA_VALIDATION_ERROR"}
+                    and regeneration_count < (parse_regenerations or {}).get(provider, 0)
+                ):
+                    regeneration_count += 1
+                    continue
+                attempt = retry_count + regeneration_count + 1
                 record = PilotRunRecord(
                     provider=provider,
                     example_id=example_id,

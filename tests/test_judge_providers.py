@@ -6,6 +6,7 @@ from evalops.evaluators.judge.providers import (
     GeminiProviderAdapter,
     GroqProviderAdapter,
     JudgeOutputMode,
+    OKMDProviderAdapter,
     OpenRouterProviderAdapter,
     ProviderHTTPResponse,
     SamplingConfig,
@@ -258,3 +259,82 @@ def test_openrouter_fallback_records_non_immutable_route_and_json_object_mode() 
     assert transport.calls[0]["payload"]["model"] == "liquid/lfm-2.5-2.6b:free"
     assert transport.calls[0]["payload"]["response_format"] == {"type": "json_object"}
     assert call.returned_model == "liquid/lfm-2.5-2.6b:free"
+
+
+def test_okmd_plain_json_request_extracts_safe_quota_and_backend_provenance() -> None:
+    transport = QueueTransport(
+        ProviderHTTPResponse(
+            status_code=200,
+            body={
+                "model": "deepseek-v4-flash",
+                "provider": "DeepSeek",
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"label":"GROUNDED","confidence":0.8,'
+                                '"unsupported_claims":[],"reason":"Supported."}'
+                            ),
+                            "reasoning": "must not persist",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 21, "completion_tokens": 14, "total_tokens": 35},
+                "model_quota": {
+                    "daily_quota_tokens": 100000,
+                    "daily_usage_tokens": 2000,
+                    "daily_remaining_tokens": 98000,
+                },
+            },
+        )
+    )
+    adapter = OKMDProviderAdapter(
+        "secret-not-persisted",
+        model="deepseek-v4-flash",
+        catalog_model_name="DeepSeek V4 Flash",
+        transport=transport,
+    )
+
+    call = adapter.judge("prompt", schema=SCHEMA, config=SamplingConfig())
+    request = transport.calls[0]
+
+    assert request["url"].endswith("/okmd/api/v1/chat/completions")
+    assert request["headers"]["Authorization"] == "Bearer secret-not-persisted"
+    assert request["payload"] == {
+        "model": "deepseek-v4-flash",
+        "messages": [{"role": "user", "content": "prompt"}],
+        "temperature": 0.0,
+        "max_tokens": 256,
+        "stream": False,
+    }
+    assert call.provider == "okmd"
+    assert call.catalog_model_name == "DeepSeek V4 Flash"
+    assert call.returned_provider == "DeepSeek"
+    assert call.backend_revision == "unavailable"
+    assert call.quota == {
+        "daily_quota_tokens": 100000,
+        "daily_usage_tokens": 2000,
+        "daily_remaining_tokens": 98000,
+    }
+    assert call.reasoning_present is False
+    assert "must not persist" not in call.safe_metadata_json()
+
+
+def test_okmd_output_failure_can_be_regenerated_once_by_execution_layer() -> None:
+    transport = QueueTransport(
+        ProviderHTTPResponse(
+            status_code=200,
+            body={
+                "model": "qwen3.6-flash",
+                "provider": "Qwen",
+                "choices": [{"message": {"content": "not json"}}],
+            },
+        )
+    )
+    adapter = OKMDProviderAdapter("secret-not-persisted", transport=transport)
+
+    call = adapter.judge("prompt", schema=SCHEMA, config=SamplingConfig())
+
+    assert call.api_success is True
+    assert call.assistant_content == "not json"

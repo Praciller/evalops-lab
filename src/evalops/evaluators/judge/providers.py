@@ -51,7 +51,11 @@ class ProviderCall:
 
     provider: str
     requested_model: str
+    gateway: str | None = None
+    catalog_model_name: str | None = None
     returned_model: str | None = None
+    returned_provider: str | None = None
+    backend_revision: str | None = None
     api_success: bool = False
     http_status: int | None = None
     response_object_type: str | None = None
@@ -64,6 +68,7 @@ class ProviderCall:
     tool_calls_present: bool = False
     usage_metadata_present: bool = False
     usage: dict[str, int | float | str] | None = None
+    quota: dict[str, int | float | str] | None = None
     request_id: str | None = None
     latency_ms: float | None = None
     structured_requested: bool = True
@@ -80,7 +85,11 @@ class ProviderCall:
         return {
             "provider": self.provider,
             "requested_model": self.requested_model,
+            "gateway": self.gateway,
+            "catalog_model_name": self.catalog_model_name,
             "returned_model": self.returned_model,
+            "returned_provider": self.returned_provider,
+            "backend_revision": self.backend_revision,
             "api_success": self.api_success,
             "http_status": self.http_status,
             "response_object_type": self.response_object_type,
@@ -92,6 +101,7 @@ class ProviderCall:
             "tool_calls_present": self.tool_calls_present,
             "usage_metadata_present": self.usage_metadata_present,
             "usage": self.usage,
+            "quota": self.quota,
             "request_id": self.request_id,
             "latency_ms": self.latency_ms,
             "structured_requested": self.structured_requested,
@@ -133,6 +143,21 @@ def _safe_usage(value: Any) -> dict[str, int | float | str] | None:
         if isinstance(item, (bool, int, float, str)) and ("token" in lowered or "cost" in lowered):
             safe[str(key)] = item
     return safe or None
+
+
+def _safe_quota(value: Any) -> dict[str, int | float | str] | None:
+    if not isinstance(value, Mapping):
+        return None
+    safe: dict[str, int | float | str] = {}
+    for key in (
+        "daily_quota_tokens",
+        "daily_usage_tokens",
+        "daily_remaining_tokens",
+    ):
+        item = value.get(key)
+        if isinstance(item, (int, float)) and not isinstance(item, bool):
+            safe[key] = item
+    return safe if len(safe) == 3 else None
 
 
 def _error_class(status_code: int) -> str:
@@ -290,13 +315,22 @@ def _common_call(
     output_mode: JudgeOutputMode,
     provider_schema_enforced: bool,
     structured_requested: bool,
+    gateway: str | None = None,
+    catalog_model_name: str | None = None,
+    returned_provider: str | None = None,
+    backend_revision: str | None = None,
+    quota: dict[str, int | float | str] | None = None,
 ) -> ProviderCall:
     usage = _safe_usage(response.body.get("usage") or response.body.get("usageMetadata"))
     api_success = 200 <= response.status_code < 300
     return ProviderCall(
         provider=provider,
         requested_model=requested_model,
+        gateway=gateway,
+        catalog_model_name=catalog_model_name,
         returned_model=returned_model,
+        returned_provider=returned_provider,
+        backend_revision=backend_revision,
         api_success=api_success,
         http_status=response.status_code,
         response_object_type=response_object_type,
@@ -309,6 +343,7 @@ def _common_call(
         tool_calls_present=tool_calls_present,
         usage_metadata_present=usage is not None,
         usage=usage,
+        quota=quota,
         request_id=response.headers.get("x-request-id"),
         latency_ms=latency_ms,
         structured_requested=structured_requested,
@@ -358,6 +393,9 @@ class _BaseProviderAdapter:
         return ProviderCall(
             provider=self.provider_name,
             requested_model=self.model,
+            gateway=getattr(self, "gateway", None),
+            catalog_model_name=getattr(self, "catalog_model_name", None),
+            backend_revision=getattr(self, "backend_revision", None),
             latency_ms=latency_ms,
             structured_requested=self.output_mode is not JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
             requested_output_mode=self.output_mode,
@@ -648,4 +686,105 @@ class OpenRouterProviderAdapter(_BaseProviderAdapter):
             output_mode=self.output_mode,
             provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
             structured_requested=self.output_mode is not JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
+        )
+
+
+class OKMDProviderAdapter(_BaseProviderAdapter):
+    """OKMD gateway adapter using plain JSON text plus generic local validation."""
+
+    provider_name = "okmd"
+    gateway = "OKMD AI Playground"
+    base_url_identifier = "gen.ai.kku.ac.th/okmd/api/v1"
+    backend_revision = "unavailable"
+    routing_immutable = False
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = "unavailable",
+        catalog_model_name: str = "unavailable",
+        transport: Transport | None = None,
+        timeout_seconds: float = 60.0,
+        output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
+    ) -> None:
+        super().__init__(
+            api_key,
+            model=model,
+            transport=transport,
+            timeout_seconds=timeout_seconds,
+            output_mode=output_mode,
+        )
+        self.catalog_model_name = catalog_model_name
+
+    def judge(
+        self,
+        prompt: str,
+        *,
+        schema: Mapping[str, Any],
+        config: SamplingConfig,
+    ) -> ProviderCall:
+        del schema
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": config.temperature,
+            "max_tokens": config.max_output_tokens,
+            "stream": False,
+        }
+        try:
+            started = time.perf_counter()
+            response = self._send(
+                "https://gen.ai.kku.ac.th/okmd/api/v1/chat/completions",
+                {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                payload,
+            )
+            latency_ms = round((time.perf_counter() - started) * 1000, 1)
+        except RuntimeError as error:
+            return self._failed_call(str(error))
+        choices = response.body.get("choices", [])
+        choice = choices[0] if isinstance(choices, list) and choices else {}
+        choice = choice if isinstance(choice, Mapping) else {}
+        message = choice.get("message", {})
+        message = message if isinstance(message, Mapping) else {}
+        content = _content_text(message.get("content"))
+        returned_model = response.body.get("model")
+        returned_provider = next(
+            (
+                response.body.get(key)
+                for key in ("provider", "backend", "model_provider")
+                if isinstance(response.body.get(key), str)
+            ),
+            None,
+        )
+        backend_revision = next(
+            (
+                response.body.get(key)
+                for key in ("backend_revision", "backendRevision", "revision")
+                if isinstance(response.body.get(key), str)
+            ),
+            self.backend_revision,
+        )
+        return _common_call(
+            provider=self.provider_name,
+            requested_model=self.model,
+            response=response,
+            latency_ms=latency_ms,
+            content=content,
+            returned_model=str(returned_model) if returned_model else self.model,
+            response_object_type=(
+                str(response.body["object"]) if response.body.get("object") else None
+            ),
+            finish_reason=(str(choice["finish_reason"]) if choice.get("finish_reason") else None),
+            reasoning_present=False,
+            reasoning_length=0,
+            tool_calls_present=False,
+            output_mode=self.output_mode,
+            provider_schema_enforced=False,
+            structured_requested=False,
+            gateway=self.gateway,
+            catalog_model_name=self.catalog_model_name,
+            returned_provider=str(returned_provider) if returned_provider else None,
+            backend_revision=str(backend_revision) if backend_revision else self.backend_revision,
+            quota=_safe_quota(response.body.get("model_quota")),
         )

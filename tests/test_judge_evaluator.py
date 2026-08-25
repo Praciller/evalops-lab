@@ -116,6 +116,26 @@ def test_api_error_is_a_controlled_failed_trace() -> None:
     assert "private" not in trace.model_dump_json()
 
 
+def test_successful_api_with_empty_content_is_a_regenerable_parse_failure() -> None:
+    adapter = GroqProviderAdapter(
+        "secret-not-persisted",
+        transport=FixedTransport(
+            {
+                "object": "chat.completion",
+                "model": "openai/gpt-oss-20b",
+                "choices": [{"message": {"content": ""}, "finish_reason": "stop"}],
+            }
+        ),
+    )
+
+    trace = LLMJudgeEvaluator(adapter).evaluate_with_trace("context", "response", "empty")
+
+    assert trace.api_success is True
+    assert trace.parse_success is False
+    assert trace.error_class == "PARSE_ERROR"
+    assert trace.safe_error_summary == "Judge content was empty."
+
+
 def test_public_evaluator_output_is_separate_from_judge_reason() -> None:
     adapter = GroqProviderAdapter(
         "secret-not-persisted",

@@ -36,10 +36,16 @@ def _manifest() -> PilotManifest:
     )
 
 
-def _trace(example_id: str, *, error_class: str | None = None) -> JudgeEvaluationTrace:
+def _trace(
+    example_id: str,
+    *,
+    error_class: str | None = None,
+    provider: str = "fake",
+    api_success: bool | None = None,
+) -> JudgeEvaluationTrace:
     return JudgeEvaluationTrace(
         example_id=example_id,
-        provider="fake",
+        provider=provider,
         requested_model="fake-model",
         prediction=(
             HallucinationPrediction(
@@ -49,7 +55,7 @@ def _trace(example_id: str, *, error_class: str | None = None) -> JudgeEvaluatio
             if error_class is None
             else None
         ),
-        api_success=error_class is None,
+        api_success=error_class is None if api_success is None else api_success,
         parse_success=error_class is None,
         error_class=error_class,
     )
@@ -123,3 +129,31 @@ def test_request_budget_rejects_the_301st_request() -> None:
 
     with pytest.raises(PilotRequestLimitError):
         budget.reserve()
+
+
+def test_okmd_parse_failure_regenerates_once_with_same_evaluator(tmp_path: Path) -> None:
+    calls = 0
+
+    def evaluator(context: str, response: str, example_id: str) -> JudgeEvaluationTrace:
+        nonlocal calls
+        calls += 1
+        return _trace(
+            example_id,
+            provider="okmd",
+            error_class="PARSE_ERROR" if calls == 1 else None,
+            api_success=True,
+        )
+
+    state = PilotStateStore(tmp_path / "state.json")
+    records = run_provider_pilot(
+        _manifest(),
+        {"a": ("context", "response")},
+        {"okmd": evaluator},
+        state,
+        RequestBudget(10),
+        parse_regenerations={"okmd": 1},
+    )
+
+    assert calls == 2
+    assert records[0].status == "SUCCESS"
+    assert records[0].attempt == 2
