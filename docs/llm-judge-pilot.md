@@ -65,7 +65,8 @@ use are the primary evidence.
 The official comparison includes only:
 
 1. Gemini Direct, `gemini-2.5-flash-lite`, using Gemini `generateContent`
-   structured JSON (`application/json` plus `responseSchema`). The supported
+   structured JSON (`application/json` plus the native `responseFormat.text`
+   schema). The supported
    REST configuration is documented in [Gemini structured output
    documentation](https://ai.google.dev/gemini-api/docs/structured-output).
 2. Groq, `openai/gpt-oss-20b`, using strict JSON Schema Structured Outputs,

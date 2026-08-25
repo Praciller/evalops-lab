@@ -309,8 +309,12 @@ class GeminiProviderAdapter(_BaseProviderAdapter):
                 "temperature": config.temperature,
                 "topP": config.top_p,
                 "maxOutputTokens": config.max_output_tokens,
-                "responseMimeType": "application/json",
-                "responseSchema": schema,
+                "responseFormat": {
+                    "text": {
+                        "mimeType": "application/json",
+                        "schema": dict(schema),
+                    }
+                },
             },
         }
         try:

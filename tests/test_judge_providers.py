@@ -59,8 +59,9 @@ def test_gemini_structured_request_uses_generate_content_schema() -> None:
     assert request["url"].endswith("models/gemini-2.5-flash-lite:generateContent")
     assert request["headers"]["x-goog-api-key"] == "secret-not-persisted"
     generation_config = request["payload"]["generationConfig"]
-    assert generation_config["responseMimeType"] == "application/json"
-    assert generation_config["responseSchema"] == SCHEMA
+    assert generation_config["responseFormat"] == {
+        "text": {"mimeType": "application/json", "schema": SCHEMA}
+    }
     assert call.assistant_content == '{"label":"GROUNDED"}'
     assert call.returned_model == "gemini-2.5-flash-lite"
 
