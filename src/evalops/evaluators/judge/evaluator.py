@@ -36,6 +36,10 @@ class JudgeEvaluationTrace(BaseModel):
     api_success: bool = False
     parse_success: bool = False
     structured_output_status: str = "NOT_RUN"
+    requested_output_mode: str = "json-schema-strict"
+    actual_output_mode: str = "json-schema-strict"
+    provider_schema_enforced: bool = False
+    local_schema_validated: bool = True
     http_status: int | None = None
     response_object_type: str | None = None
     finish_reason: str | None = None
@@ -103,6 +107,7 @@ class LLMJudgeEvaluator:
             "prompt_version": JUDGE_PROMPT_VERSION,
             "prompt_sha256": JUDGE_PROMPT_SHA256,
             "schema_version": JUDGE_SCHEMA_VERSION,
+            "output_mode": self.provider.output_mode,
             "sampling": {
                 "temperature": self.sampling.temperature,
                 "top_p": self.sampling.top_p,
@@ -156,6 +161,10 @@ class LLMJudgeEvaluator:
             api_success=call.api_success,
             parse_success=prediction is not None,
             structured_output_status=structured_status,
+            requested_output_mode=call.requested_output_mode,
+            actual_output_mode=call.actual_output_mode,
+            provider_schema_enforced=call.provider_schema_enforced,
+            local_schema_validated=call.local_schema_validated,
             http_status=call.http_status,
             response_object_type=call.response_object_type,
             finish_reason=call.finish_reason,

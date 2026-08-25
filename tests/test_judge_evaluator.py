@@ -58,6 +58,9 @@ def test_gemini_response_maps_to_grounded_prediction() -> None:
     assert trace.prediction.label.value == "GROUNDED"
     assert trace.prediction.score == 0.2
     assert trace.structured_output_status == "PASS"
+    assert trace.actual_output_mode == "json-schema-strict"
+    assert trace.provider_schema_enforced is True
+    assert trace.local_schema_validated is True
     assert trace.parse_success is True
 
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -34,6 +36,15 @@ class ProviderHTTPResponse:
 Transport = Callable[[str, dict[str, str], dict[str, Any], float], ProviderHTTPResponse]
 
 
+class JudgeOutputMode(StrEnum):
+    """Provider output paths, separated from the frozen judge semantics."""
+
+    JSON_SCHEMA_STRICT = "json-schema-strict"
+    JSON_SCHEMA_BEST_EFFORT = "json-schema-best-effort"
+    JSON_OBJECT_LOCAL_VALIDATION = "json-object-local-validation"
+    JSON_TEXT_LOCAL_VALIDATION = "json-text-local-validation"
+
+
 @dataclass(frozen=True)
 class ProviderCall:
     """In-memory call result whose safe projection excludes content and reasoning."""
@@ -56,6 +67,10 @@ class ProviderCall:
     request_id: str | None = None
     latency_ms: float | None = None
     structured_requested: bool = True
+    requested_output_mode: str = JudgeOutputMode.JSON_SCHEMA_STRICT
+    actual_output_mode: str = JudgeOutputMode.JSON_SCHEMA_STRICT
+    provider_schema_enforced: bool = False
+    local_schema_validated: bool = True
     error_class: str | None = None
     safe_error_summary: str | None = None
 
@@ -80,6 +95,10 @@ class ProviderCall:
             "request_id": self.request_id,
             "latency_ms": self.latency_ms,
             "structured_requested": self.structured_requested,
+            "requested_output_mode": self.requested_output_mode,
+            "actual_output_mode": self.actual_output_mode,
+            "provider_schema_enforced": self.provider_schema_enforced,
+            "local_schema_validated": self.local_schema_validated,
             "error_class": self.error_class,
             "safe_error_summary": self.safe_error_summary,
         }
@@ -94,6 +113,7 @@ class JudgeProvider(Protocol):
     provider_name: str
     base_url_identifier: str
     model: str
+    output_mode: str
 
     def judge(
         self,
@@ -133,14 +153,74 @@ def _safe_error_summary(response: ProviderHTTPResponse) -> str | None:
     if 200 <= response.status_code < 300:
         return None
     error = response.body.get("error")
-    details: list[str] = []
+    details: dict[str, Any] = {}
     if isinstance(error, Mapping):
         for key in ("status", "type", "code"):
             value = error.get(key)
             if isinstance(value, (str, int)) and len(str(value)) <= 80:
-                details.append(f"{key}={value}")
-    suffix = f" ({', '.join(details)})" if details else ""
-    return f"Provider returned HTTP {response.status_code}{suffix}."
+                details[key] = value
+        message = _safe_error_text(error.get("message"))
+        if message is not None:
+            details["message"] = message
+        violations = _safe_field_violations(error.get("details"))
+        if violations:
+            details["field_violations"] = violations
+    elif isinstance(error, str):
+        candidate = error.strip()
+        if re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", candidate) and any(
+            term in candidate.casefold()
+            for term in ("auth", "permission", "blocked", "quota", "rate", "invalid", "model")
+        ):
+            details["code"] = candidate
+        else:
+            details["message"] = "[REDACTED_ERROR_MESSAGE]"
+    elif "message" in response.body:
+        message = _safe_error_text(response.body.get("message"))
+        if message is not None:
+            details["message"] = message
+    suffix = f" {json.dumps(details, ensure_ascii=False, sort_keys=True)}" if details else ""
+    return f"Provider returned HTTP {response.status_code}.{suffix}"
+
+
+def _safe_error_text(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = " ".join(value.split())
+    lowered = text.casefold()
+    if any(term in lowered for term in ("credential", "authorization", "bearer", "secret")):
+        return "[REDACTED_ERROR_MESSAGE]"
+    text = re.sub(
+        r"(?i)(api[-_ ]?key|token)\s*[:=]\s*[^\s,;]+",
+        r"\1=[REDACTED]",
+        text,
+    )
+    return text[:240]
+
+
+def _safe_field_violations(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    violations: list[dict[str, str]] = []
+    for detail in value:
+        if not isinstance(detail, Mapping):
+            continue
+        entries = detail.get("fieldViolations")
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            field = _safe_error_text(entry.get("field"))
+            description = _safe_error_text(entry.get("description"))
+            if field is not None or description is not None:
+                violations.append(
+                    {
+                        key: value
+                        for key, value in (("field", field), ("description", description))
+                        if value is not None
+                    }
+                )
+    return violations[:8]
 
 
 def _transport_error(error: Exception) -> str:
@@ -207,6 +287,9 @@ def _common_call(
     reasoning_present: bool,
     reasoning_length: int,
     tool_calls_present: bool,
+    output_mode: JudgeOutputMode,
+    provider_schema_enforced: bool,
+    structured_requested: bool,
 ) -> ProviderCall:
     usage = _safe_usage(response.body.get("usage") or response.body.get("usageMetadata"))
     api_success = 200 <= response.status_code < 300
@@ -228,6 +311,11 @@ def _common_call(
         usage=usage,
         request_id=response.headers.get("x-request-id"),
         latency_ms=latency_ms,
+        structured_requested=structured_requested,
+        requested_output_mode=output_mode,
+        actual_output_mode=output_mode,
+        provider_schema_enforced=provider_schema_enforced,
+        local_schema_validated=True,
         error_class=None if api_success else _error_class(response.status_code),
         safe_error_summary=_safe_error_summary(response),
     )
@@ -245,11 +333,13 @@ class _BaseProviderAdapter:
         model: str,
         transport: Transport | None = None,
         timeout_seconds: float = 60.0,
+        output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_SCHEMA_STRICT,
     ) -> None:
         if not api_key.strip():
             raise ValueError("provider API key must not be empty")
         self._api_key = api_key
         self.model = model
+        self.output_mode = JudgeOutputMode(output_mode)
         self._transport = transport or _default_transport
         self._timeout_seconds = timeout_seconds
 
@@ -269,7 +359,11 @@ class _BaseProviderAdapter:
             provider=self.provider_name,
             requested_model=self.model,
             latency_ms=latency_ms,
-            structured_requested=True,
+            structured_requested=self.output_mode is not JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
+            requested_output_mode=self.output_mode,
+            actual_output_mode=self.output_mode,
+            provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
+            local_schema_validated=True,
             error_class=error_class,
             safe_error_summary="Provider request did not return a usable completion.",
         )
@@ -288,12 +382,14 @@ class GeminiProviderAdapter(_BaseProviderAdapter):
         model: str = "gemini-2.5-flash-lite",
         transport: Transport | None = None,
         timeout_seconds: float = 60.0,
+        output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_SCHEMA_STRICT,
     ) -> None:
         super().__init__(
             api_key,
             model=model,
             transport=transport,
             timeout_seconds=timeout_seconds,
+            output_mode=output_mode,
         )
 
     def judge(
@@ -303,19 +399,26 @@ class GeminiProviderAdapter(_BaseProviderAdapter):
         schema: Mapping[str, Any],
         config: SamplingConfig,
     ) -> ProviderCall:
+        generation_config: dict[str, Any] = {
+            "temperature": config.temperature,
+            "topP": config.top_p,
+            "maxOutputTokens": config.max_output_tokens,
+        }
+        if self.output_mode in {
+            JudgeOutputMode.JSON_SCHEMA_STRICT,
+            JudgeOutputMode.JSON_SCHEMA_BEST_EFFORT,
+        }:
+            generation_config.update(
+                {
+                    "responseMimeType": "application/json",
+                    "responseJsonSchema": dict(schema),
+                }
+            )
+        elif self.output_mode is JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION:
+            generation_config["responseMimeType"] = "application/json"
         payload = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": config.temperature,
-                "topP": config.top_p,
-                "maxOutputTokens": config.max_output_tokens,
-                "responseFormat": {
-                    "text": {
-                        "mimeType": "application/json",
-                        "schema": dict(schema),
-                    }
-                },
-            },
+            "generationConfig": generation_config,
         }
         try:
             started = time.perf_counter()
@@ -361,6 +464,9 @@ class GeminiProviderAdapter(_BaseProviderAdapter):
                 len(json.dumps(value, ensure_ascii=False)) for value in reasoning_values
             ),
             tool_calls_present=False,
+            output_mode=self.output_mode,
+            provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
+            structured_requested=self.output_mode is not JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
         )
 
 
@@ -377,12 +483,14 @@ class GroqProviderAdapter(_BaseProviderAdapter):
         model: str = "openai/gpt-oss-20b",
         transport: Transport | None = None,
         timeout_seconds: float = 60.0,
+        output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_SCHEMA_STRICT,
     ) -> None:
         super().__init__(
             api_key,
             model=model,
             transport=transport,
             timeout_seconds=timeout_seconds,
+            output_mode=output_mode,
         )
 
     def judge(
@@ -401,15 +509,18 @@ class GroqProviderAdapter(_BaseProviderAdapter):
             "stream": False,
             "include_reasoning": config.include_reasoning,
             "reasoning_effort": config.reasoning_effort,
-            "response_format": {
+        }
+        if self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT:
+            payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "ragtruth_strict_groundedness",
                     "strict": True,
                     "schema": dict(schema),
                 },
-            },
-        }
+            }
+        elif self.output_mode is JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION:
+            payload["response_format"] = {"type": "json_object"}
         try:
             started = time.perf_counter()
             response = self._send(
@@ -444,4 +555,97 @@ class GroqProviderAdapter(_BaseProviderAdapter):
                 len(json.dumps(reasoning, ensure_ascii=False)) if reasoning is not None else 0
             ),
             tool_calls_present=isinstance(tool_calls, list) and bool(tool_calls),
+            output_mode=self.output_mode,
+            provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
+            structured_requested=self.output_mode is not JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
+        )
+
+
+class OpenRouterProviderAdapter(_BaseProviderAdapter):
+    """Explicitly non-immutable OpenRouter fallback adapter."""
+
+    provider_name = "openrouter"
+    base_url_identifier = "openrouter.ai/api/v1"
+    routing_immutable = False
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = "liquid/lfm-2.5-2.6b:free",
+        transport: Transport | None = None,
+        timeout_seconds: float = 60.0,
+        output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION,
+    ) -> None:
+        super().__init__(
+            api_key,
+            model=model,
+            transport=transport,
+            timeout_seconds=timeout_seconds,
+            output_mode=output_mode,
+        )
+
+    def judge(
+        self,
+        prompt: str,
+        *,
+        schema: Mapping[str, Any],
+        config: SamplingConfig,
+    ) -> ProviderCall:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "max_tokens": config.max_output_tokens,
+            "stream": False,
+        }
+        if self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ragtruth_strict_groundedness",
+                    "strict": True,
+                    "schema": dict(schema),
+                },
+            }
+        elif self.output_mode is JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            started = time.perf_counter()
+            response = self._send(
+                "https://openrouter.ai/api/v1/chat/completions",
+                {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"},
+                payload,
+            )
+            latency_ms = round((time.perf_counter() - started) * 1000, 1)
+        except RuntimeError as error:
+            return self._failed_call(str(error))
+        choices = response.body.get("choices", [])
+        choice = choices[0] if isinstance(choices, list) and choices else {}
+        choice = choice if isinstance(choice, Mapping) else {}
+        message = choice.get("message", {})
+        message = message if isinstance(message, Mapping) else {}
+        content = _content_text(message.get("content"))
+        reasoning = message.get("reasoning", message.get("reasoning_content"))
+        tool_calls = message.get("tool_calls")
+        return _common_call(
+            provider=self.provider_name,
+            requested_model=self.model,
+            response=response,
+            latency_ms=latency_ms,
+            content=content,
+            returned_model=(str(response.body["model"]) if response.body.get("model") else None),
+            response_object_type=(
+                str(response.body["object"]) if response.body.get("object") else None
+            ),
+            finish_reason=(str(choice["finish_reason"]) if choice.get("finish_reason") else None),
+            reasoning_present=reasoning is not None,
+            reasoning_length=(
+                len(json.dumps(reasoning, ensure_ascii=False)) if reasoning is not None else 0
+            ),
+            tool_calls_present=isinstance(tool_calls, list) and bool(tool_calls),
+            output_mode=self.output_mode,
+            provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
+            structured_requested=self.output_mode is not JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION,
         )

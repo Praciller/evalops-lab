@@ -65,8 +65,10 @@ use are the primary evidence.
 The official comparison includes only:
 
 1. Gemini Direct, `gemini-2.5-flash-lite`, using Gemini `generateContent`
-   structured JSON (`application/json` plus the native `responseFormat.text`
-   schema). The supported
+   structured JSON (`responseMimeType=application/json` plus
+   `responseJsonSchema`). The prior `generationConfig.responseFormat.text`
+   request was rejected by the native `v1beta` endpoint with HTTP 400
+   `INVALID_ARGUMENT`; the adapter now uses the direct native fields. The supported
    REST configuration is documented in [Gemini structured output
    documentation](https://ai.google.dev/gemini-api/docs/structured-output).
 2. Groq, `openai/gpt-oss-20b`, using strict JSON Schema Structured Outputs,
@@ -74,6 +76,14 @@ The official comparison includes only:
    `reasoning_effort=low`. Groq documents strict mode requirements that all
    properties be required and objects use `additionalProperties=false` in its
    [Structured Outputs guide](https://console.groq.com/docs/structured-outputs).
+
+Provider output mode is recorded separately from judge semantics. The supported
+paths are `json-schema-strict`, `json-schema-best-effort`,
+`json-object-local-validation`, and `json-text-local-validation`. Every path is
+validated by the same local Pydantic contract. If Groq basic completion is
+permission-blocked, the optional fallback is the exact OpenRouter model
+`liquid/lfm-2.5-2.6b:free`; it is explicitly marked `routing_immutable=false`
+and is not equivalent to a direct reproducible provider.
 
 The provider adapter records requested and returned model identifiers, base URL
 identifier, prompt/schema hashes, sampling/reasoning settings, dataset and
@@ -94,10 +104,12 @@ python scripts/run_phase5a_pilot.py --run --preflight-artifact reports/phase5a-p
 python scripts/run_phase5a_pilot.py --consistency
 ```
 
-Each synthetic preflight call counts toward a hard 300-request ceiling. A
-preflight restart preserves the prior request ledger before adding its two new
-provider calls. The base pilot uses 240 calls. The optional consistency subset uses 12 IDs, two
-additional evaluations per provider/ID, and at most 48 calls, for 290 total.
+Each synthetic preflight call counts toward a fresh 300-request repair ceiling.
+The repair ledger is separate from the six requests consumed by the prior
+blocked attempt. A valid preflight requires two synthetic cases per selected
+provider, so the minimum is four new calls. The base pilot uses 240 calls. The
+optional consistency subset uses 12 IDs, two additional evaluations per
+provider/ID, and at most 48 calls, for 292 new calls including preflight.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
 
