@@ -28,7 +28,10 @@ Dataset → validation → evaluation runner → metric evaluators
                              baseline/regression comparison
 ```
 
-The first runnable path is retrieval evaluation. Generation and LLM-as-a-Judge are typed interfaces for future adapters, not fake model evaluations.
+The first runnable path is retrieval evaluation. Generation remains a typed
+interface for future adapters. The bounded Phase 5A LLM-as-a-Judge path is
+opt-in and does not replace human ground truth or existing deterministic/HHEM
+results.
 
 ## Implemented
 
@@ -41,6 +44,10 @@ The first runnable path is retrieval evaluation. Generation and LLM-as-a-Judge a
 - Synthetic Thai fixtures, a pinned MIRACL Thai adapter/mini benchmark, checksum-aware non-destructive preparation, and GitHub Actions CI.
 - RAGTruth human-label normalization, strict/factual annotation policies, quality filtering, deterministic heuristic hallucination evaluation, and failure analysis.
 - Optional pinned HHEM-2.1-Open model evaluation with reviewed custom-code hashes, deterministic context construction, threshold leakage protection, and paired McNemar comparison.
+- Phase 5A LLM judge pilot framework with frozen strict-groundedness contracts,
+  Gemini/Groq adapters, deterministic balanced sampling, resumable bounded
+  execution, and aggregate comparison tooling. See
+  [`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md).
 
 ## Evaluation layers
 
@@ -51,8 +58,9 @@ EvalOps Lab keeps the evidence chain separate:
 3. Deterministic metrics and model-backed evaluators produce traceable results.
 4. Failure analysis and regression comparison turn scores into engineering evidence.
 
-Generation and LLM-as-a-Judge modules are typed interfaces for future phases;
-they do not claim correctness judgments today.
+Human labels remain distinct from model-generated judge outputs. Phase 5A is a
+bounded evaluator-validation framework; it does not claim full-population
+RAGTruth performance.
 
 ## Initial datasets
 
@@ -174,7 +182,7 @@ GitHub Actions runs the same lint, format, type, and test gates on pushes and pu
 
 ## Roadmap
 
-- Phase 5: LLM-as-a-Judge validation against the preserved RAGTruth human-ground-truth population.
+- Phase 5B: owner-reviewed full-population LLM-as-a-Judge validation after the Phase 5A pilot.
 - Phase 6: three-way evaluator analysis: heuristic, HHEM, and LLM judge.
 - Phase 7: expand the curated Thai evaluation benchmark.
 - Phase 8: code-generation and code-migration evaluator adapters.
