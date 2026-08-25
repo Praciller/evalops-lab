@@ -83,7 +83,11 @@ paths are `json-schema-strict`, `json-schema-best-effort`,
 validated by the same local Pydantic contract. If Groq basic completion is
 permission-blocked, the optional fallback is the exact OpenRouter model
 `liquid/lfm-2.5-2.6b:free`; it is explicitly marked `routing_immutable=false`
-and is not equivalent to a direct reproducible provider.
+and is not equivalent to a direct reproducible provider. In the repaired
+preflight, Groq basic completion returned HTTP 403 without a provider error
+object, so its permission code remains unavailable rather than guessed. The
+OpenRouter fallback returned one API-successful but locally invalid/unfinished
+JSON response and one HTTP 503, so it did not qualify as the secondary judge.
 
 The provider adapter records requested and returned model identifiers, base URL
 identifier, prompt/schema hashes, sampling/reasoning settings, dataset and
@@ -110,6 +114,8 @@ blocked attempt. A valid preflight requires two synthetic cases per selected
 provider, so the minimum is four new calls. The base pilot uses 240 calls. The
 optional consistency subset uses 12 IDs, two additional evaluations per
 provider/ID, and at most 48 calls, for 292 new calls including preflight.
+The repaired attempt recorded 9 new provider requests after 6 prior blocked
+attempt requests; neither the pilot nor consistency requests were started.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
 
