@@ -1,0 +1,23 @@
+{
+  "name": "RAGTruth",
+  "dataset_id": "ragtruth",
+  "source": "https://github.com/ParticleMedia/RAGTruth",
+  "purpose": "Groundedness and hallucination evaluation against human annotations.",
+  "upstream_revision": "c103204b9ce28d6bbad859304bf30de72b8ed8fe",
+  "license": "MIT",
+  "language": "English source corpus; model responses and prompts are preserved as published",
+  "official_files": {
+    "response": "dataset/response.jsonl",
+    "source_info": "dataset/source_info.jsonl"
+  },
+  "official_statistics": {
+    "responses": 17790,
+    "hallucination_responses": 7664,
+    "hallucination_spans": 14289,
+    "source_instances": 2965
+  },
+  "local_preparation": "python -m evalops dataset prepare ragtruth --output-dir datasets/external/ragtruth",
+  "checksum": "recorded in ignored datasets/external/ragtruth/preparation-manifest.json",
+  "status": "pinned-preparation-and-evaluation-implemented",
+  "notes": "Human annotations are ground truth. Evaluator predictions are separate. Strict groundedness counts implicit_true spans; factual-correctness excludes only implicit_true spans. Quality defaults to good and reports excluded rows."
+}

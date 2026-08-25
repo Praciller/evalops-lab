@@ -1,0 +1,20 @@
+{
+  "name": "thai-rag-eval-200",
+  "dataset_id": "thai-rag-eval-200",
+  "purpose": "Manually curated Thai RAG benchmark spanning retrieval, groundedness, abstention, and failure analysis.",
+  "target_records": 200,
+  "bootstrap_records": 5,
+  "bootstrap_fixture": "datasets/fixtures/thai-rag-sample.jsonl",
+  "categories": [
+    "direct_factual",
+    "multi_document",
+    "ambiguous_query",
+    "no_answer",
+    "conflicting_context",
+    "temporal",
+    "numeric_reasoning",
+    "citation_sensitive",
+    "adversarial_noise"
+  ],
+  "status": "bootstrap specification; do not infer benchmark quality from five fixtures"
+}

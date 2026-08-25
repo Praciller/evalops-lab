@@ -1,0 +1,36 @@
+{
+  "name": "HHEM-2.1-Open",
+  "repository": "vectara/hallucination_evaluation_model",
+  "revision": "8e4a2e6e96c708cc76c2344f7e4757df2515292c",
+  "license": "Apache-2.0",
+  "purpose": "Local factual-consistency scoring for premise/context and hypothesis/response pairs.",
+  "base_model": "google/flan-t5-base",
+  "tokenizer": "google/flan-t5-base",
+  "tokenizer_revision": "7bcac572ce56db69c1ea7c8af255c5d7c9672fc2",
+  "parameter_count": "0.1B",
+  "weight_file": {
+    "name": "model.safetensors",
+    "size_bytes": 438535352,
+    "hf_etag": "b5c41f4c1e953e3375973422f014eade266a4832a01fa718e7583e5638453372"
+  },
+  "transformers_version": "4.39.3",
+  "required_custom_code": true,
+  "reviewed_custom_code_files": [
+    "configuration_hhem_v2.py",
+    "modeling_hhem_v2.py"
+  ],
+  "custom_code_hashes": {
+    "configuration_hhem_v2.py": "ec57fe344e3104d0d4a99b13d893529aac1e2bd69e83c2814235baf37cdcacc7",
+    "modeling_hhem_v2.py": "fcc9cfcee513cc08eb46eac21f1acb498b122572fb35a7dec4d85fae45cb9bba"
+  },
+  "config_sha256": "773139fe764fe20e146ab14e627b188ccafae35f93cf6f5258dc6c237016b870",
+  "security_status": "approved-pinned-review-v1",
+  "approval_marker": "hhem-2.1-open:8e4a2e6e96c708cc76c2344f7e4757df2515292c:custom-code-reviewed-v1",
+  "security_review": {
+    "reviewed_on": "2026-08-25",
+    "findings": [],
+    "network_boundary": "Custom code fetches only static google/flan-t5-base config/tokenizer assets through Transformers; no user text is passed to the hub.",
+    "execution_boundary": "Only this exact revision is allowed; safetensors is preferred and model weights/cache stay outside the repository."
+  },
+  "cache_behavior": "Use a normal external Hugging Face cache; never commit model weights or cache files."
+}

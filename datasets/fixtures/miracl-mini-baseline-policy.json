@@ -1,0 +1,19 @@
+{
+  "rules": [
+    {
+      "metric_name": "recall_at_5",
+      "direction": "higher_is_better",
+      "max_degradation": 0.05
+    },
+    {
+      "metric_name": "mrr",
+      "direction": "higher_is_better",
+      "max_degradation": 0.05
+    },
+    {
+      "metric_name": "ndcg_at_5",
+      "direction": "higher_is_better",
+      "max_degradation": 0.05
+    }
+  ]
+}

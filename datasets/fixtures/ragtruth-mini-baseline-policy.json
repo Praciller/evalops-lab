@@ -1,0 +1,10 @@
+{
+  "description": "Synthetic RAGTruth fixture policy; not an official benchmark result.",
+  "rules": [
+    {
+      "metric_name": "f1",
+      "direction": "higher_is_better",
+      "max_degradation": 0.0
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{"source_id":"s1","task_type":"QA","source":"synthetic","source_info":{"question":"What is the capital city?","passages":"The capital city is London."},"prompt":"Answer using the passage."}
+{"source_id":"s2","task_type":"QA","source":"synthetic","source_info":{"question":"What is Paris?","passages":"France is a country in Europe."},"prompt":"Answer using the passage."}
+{"source_id":"s3","task_type":"Summary","source":"synthetic","source_info":"The river is important to local wildlife.","prompt":"Summarize the source."}
+{"source_id":"s4","task_type":"Data2txt","source":"synthetic","source_info":{"field":"The question has a numeric answer."},"prompt":"Write text from the data."}
+{"source_id":"s5","task_type":"QA","source":"synthetic","source_info":"","prompt":"Answer using the passage."}
+{"source_id":"s6","task_type":"QA","source":"synthetic","source_info":{"question":"What is the capital city?","passages":"The capital city is London."},"prompt":"Answer using the passage."}
+{"source_id":"s7","task_type":"Summary","source":"synthetic","source_info":"The river is long.","prompt":"Summarize the source."}
+{"source_id":"s8","task_type":"Summary","source":"synthetic","source_info":"The sky is blue.","prompt":"Summarize the source."}
