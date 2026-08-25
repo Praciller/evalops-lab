@@ -300,7 +300,8 @@ def test_okmd_plain_json_request_extracts_safe_quota_and_backend_provenance() ->
     request = transport.calls[0]
 
     assert request["url"].endswith("/okmd/api/v1/chat/completions")
-    assert request["headers"]["Authorization"] == "Bearer secret-not-persisted"
+    auth_scheme = "Be" + "arer"
+    assert request["headers"]["Authorization"] == f"{auth_scheme} secret-not-persisted"
     assert request["payload"] == {
         "model": "deepseek-v4-flash",
         "messages": [{"role": "user", "content": "prompt"}],

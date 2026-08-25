@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -50,21 +51,16 @@ from evalops.pilot.execution import (
     run_provider_pilot,
 )
 from evalops.pilot.models import PilotManifest, PilotRunRecord
+from evalops.pilot.readiness import assess_llm_judge_readiness
 from evalops.pilot.sampling import build_consistency_manifest, build_pilot_manifest
 from evalops.providers.okmd import (
-    OKMDClient,
     OKMDModel,
-    discovery_snapshot_payload,
     estimate_pilot_tokens,
     model_family,
-    parse_models_response,
-    parse_quota,
-    select_okmd_candidates,
-    validate_quota_gate,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OFFICIAL_PROVIDER_NAMES = ("gemini", "okmd")
+OFFICIAL_PROVIDER_NAMES = ("gemini",)
 OKMD_MAX_CANDIDATES = 3
 OKMD_OUTPUT_MODE = JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION
 DEFAULT_MANIFEST = REPO_ROOT / "datasets" / "manifests" / "ragtruth-llm-judge-pilot-v1.json"
@@ -75,20 +71,25 @@ DEFAULT_DATA_DIR = REPO_ROOT / "datasets" / "external" / "ragtruth"
 HEURISTIC_ARTIFACT = REPO_ROOT / "reports" / "ragtruth-test-heuristic-v1.json"
 HHEM_ARTIFACT = REPO_ROOT / "reports" / "ragtruth-test-hhem-v1.json"
 OKMD_DISCOVERY_SNAPSHOT = REPO_ROOT / "reports" / "okmd-model-discovery.json"
+EXPECTED_PILOT_STRATUM_COUNTS = {
+    f"{task_type}:{label.value}": 20
+    for task_type in ("Data2txt", "QA", "Summary")
+    for label in (HallucinationLabel.GROUNDED, HallucinationLabel.HALLUCINATED)
+}
 
 
 def estimate_request_count(pilot_size: int, *, include_consistency: bool) -> int:
     """Estimate preflight, base, and optional consistency requests."""
 
-    return 9 + (2 * pilot_size) + (48 if include_consistency else 0)
+    return 2 + pilot_size + (24 if include_consistency else 0)
 
 
 def preflight_request_count(previous_external_requests: int) -> int:
-    """Add discovery, Gemini, and three bounded OKMD candidate attempts."""
+    """Add the two synthetic requests used by the single-provider preflight."""
 
     if previous_external_requests < 0:
         raise ValueError("previous external request count cannot be negative")
-    return previous_external_requests + 9
+    return previous_external_requests + 2
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -136,6 +137,68 @@ def _load_or_create_manifest(dataset: Any, path: Path, *, sample_only: bool) -> 
     if sample_only:
         _write_json(path, manifest.model_dump(mode="json"))
     return manifest
+
+
+def _validate_pilot_manifest(manifest: PilotManifest) -> None:
+    """Validate the exact frozen population before any provider request."""
+
+    if manifest.pilot_id != "ragtruth-llm-judge-pilot-v1":
+        raise ValueError(f"unexpected pilot ID: {manifest.pilot_id}")
+    if manifest.split != "test" or manifest.quality_filter != ["good"]:
+        raise ValueError("pilot manifest must be frozen to TEST/good examples")
+    if manifest.sampling_seed != 20260825:
+        raise ValueError(f"unexpected pilot sampling seed: {manifest.sampling_seed}")
+    if len(manifest.example_ids) != 120:
+        raise ValueError(
+            f"pilot manifest must contain 120 examples, found {len(manifest.example_ids)}"
+        )
+    if manifest.stratum_counts != EXPECTED_PILOT_STRATUM_COUNTS:
+        raise ValueError(
+            "pilot manifest must contain exactly 20 examples in each of the six frozen strata"
+        )
+    for record in manifest.records:
+        expected_stratum = f"{record.task_type}:{record.human_label.value}"
+        if record.stratum != expected_stratum:
+            raise ValueError(f"manifest stratum disagrees with human label: {record.example_id}")
+
+
+def _assert_no_prompt_leakage(
+    examples: Mapping[str, tuple[str, str] | object],
+) -> None:
+    """Require provider inputs to contain only a context/response pair."""
+
+    for example_id, value in examples.items():
+        if (
+            not isinstance(value, tuple)
+            or len(value) != 2
+            or not all(isinstance(item, str) for item in value)
+        ):
+            raise ValueError(
+                "prompt leakage guard requires context/response pairs without annotation metadata "
+                f"for {example_id}"
+            )
+
+
+def _build_pilot_examples(dataset: Any, manifest: PilotManifest) -> dict[str, tuple[str, str]]:
+    """Build judge inputs from source text only and verify manifest alignment."""
+
+    examples_by_id = {example.example_id: example for example in dataset.examples}
+    examples: dict[str, tuple[str, str]] = {}
+    for record in manifest.records:
+        example = examples_by_id.get(record.example_id)
+        if example is None:
+            raise ValueError(
+                f"frozen pilot manifest ID is missing from the TEST dataset: {record.example_id}"
+            )
+        if example.split != "test" or example.quality != "good":
+            raise ValueError(
+                f"pilot example is outside the frozen TEST/good population: {record.example_id}"
+            )
+        if example.human_label(AnnotationPolicy.STRICT_GROUNDEDNESS) is not record.human_label:
+            raise ValueError(f"pilot human-label mismatch for manifest ID: {record.example_id}")
+        examples[record.example_id] = (example.source_context, example.response)
+    _assert_no_prompt_leakage(examples)
+    return examples
 
 
 def _sampling() -> SamplingConfig:
@@ -264,6 +327,11 @@ def _provider_preflight_result(
     ]
     return {
         "provider": evaluator.provider.provider_name,
+        "provider_family": getattr(
+            evaluator.provider,
+            "provider_family",
+            evaluator.provider.provider_name,
+        ),
         "model": evaluator.provider.model,
         "base_url_identifier": evaluator.provider.base_url_identifier,
         "requested_output_mode": evaluator.provider.output_mode,
@@ -326,110 +394,36 @@ def _preflight(
     data_dir: Path,
     manifest_path: Path,
 ) -> dict[str, Any]:
-    call_count = 0
-    results: dict[str, Any] = {}
-    output_modes: dict[str, str] = {}
-
+    dataset = _load_dataset(data_dir)
+    manifest = _load_or_create_manifest(dataset, manifest_path, sample_only=False)
+    _validate_pilot_manifest(manifest)
+    pilot_examples = _build_pilot_examples(dataset, manifest)
     gemini_evaluator = _provider_evaluators(
         ("gemini",), {"gemini": JudgeOutputMode.JSON_SCHEMA_STRICT}
     )["gemini"]
     gemini_result = _provider_preflight_result(gemini_evaluator, SYNTHETIC_PREFLIGHT_CASES)
-    call_count += gemini_result["requests_used"]
-    results["gemini"] = gemini_result
-    if gemini_result["api_success_count"] == 2 and gemini_result["parse_success_count"] == 2:
-        output_modes["gemini"] = JudgeOutputMode.JSON_SCHEMA_STRICT
-
-    okmd_key = os.environ.get("OKMD_API_KEY", "").strip()
-    if not okmd_key:
-        raise RuntimeError(
-            "required provider credential environment variable is missing: OKMD_API_KEY"
-        )
-    discovery_requests = 0
-    if OKMD_DISCOVERY_SNAPSHOT.is_file():
-        snapshot = json.loads(OKMD_DISCOVERY_SNAPSHOT.read_text(encoding="utf-8"))
-        catalog = parse_models_response(snapshot)
-    else:
-        client = OKMDClient(okmd_key)
-        catalog = client.discover_models()
-        _write_json(OKMD_DISCOVERY_SNAPSHOT, discovery_snapshot_payload(catalog))
-        discovery_requests = 1
-    candidates = select_okmd_candidates(catalog, max_candidates=OKMD_MAX_CANDIDATES)
-    manifest, estimated_tokens = _okmd_pilot_estimate(data_dir, manifest_path)
-    del manifest
-    call_count += discovery_requests
-    candidate_results: list[dict[str, Any]] = []
-    selected_model: dict[str, str] | None = None
-    selected_okmd_result: dict[str, Any] | None = None
-    selected_quota_gate: dict[str, Any] | None = None
-    for candidate in candidates:
-        model_info = {"model_id": candidate.model_id, "name": candidate.name}
-        evaluator = _provider_evaluators(("okmd",), {"okmd": OKMD_OUTPUT_MODE}, model_info)["okmd"]
-        result = _provider_preflight_result(
-            evaluator,
-            SYNTHETIC_PREFLIGHT_CASES,
-            allow_one_regeneration=True,
-        )
-        call_count += result["requests_used"]
-        result["requested_model_id"] = candidate.model_id
-        result["catalog_model_name"] = candidate.name
-        result["requested_model_family"] = model_family(candidate)
-        result["model_diversity"] = (
-            "PASS" if _okmd_candidate_is_non_gemini(candidate, result) else "FAIL_GEMINI_BACKEND"
-        )
-        quota_values = [case.get("quota") for case in result["cases"] if case.get("quota")]
-        quota = parse_quota(quota_values[-1]) if quota_values else None
-        result["quota"] = quota.__dict__ if quota is not None else None
-        result["quota_gate"] = None
-        candidate_results.append(result)
-        if (
-            result["api_success_count"] == 2
-            and result["parse_success_count"] == 2
-            and result["model_diversity"] == "PASS"
-        ):
-            if quota is not None:
-                gate = validate_quota_gate(quota, estimated_tokens=estimated_tokens)
-                result["quota_gate"] = gate.__dict__
-                if gate.status == "PASS":
-                    selected_model = model_info
-                    selected_okmd_result = result
-                    selected_quota_gate = gate.__dict__
-                    output_modes["okmd"] = OKMD_OUTPUT_MODE
-                    break
-            else:
-                result["quota_gate"] = {
-                    "status": "OKMD_QUOTA_INSUFFICIENT_FOR_120",
-                    "estimated_tokens": estimated_tokens,
-                    "remaining_tokens": None,
-                }
-
-    if selected_okmd_result is not None:
-        results["okmd"] = selected_okmd_result
-    else:
-        results["okmd"] = (
-            candidate_results[-1]
-            if candidate_results
-            else {
-                "provider": "okmd",
-                "cases": [],
-                "api_success_count": 0,
-                "parse_success_count": 0,
-            }
-        )
-    selected_providers = (
-        ["gemini", "okmd"] if selected_model is not None and "gemini" in output_modes else []
+    results = {"gemini": gemini_result}
+    readiness = assess_llm_judge_readiness(("gemini",), results)
+    selected_providers = list(readiness["qualified_providers"])
+    output_modes = (
+        {"gemini": JudgeOutputMode.JSON_SCHEMA_STRICT} if "gemini" in selected_providers else {}
     )
-    repair_requests = prior_repair_requests + call_count
-    config_hashes: dict[str, str] = {}
-    if "gemini" in output_modes:
-        config_hashes["gemini"] = _configuration_hash(
-            _provider_evaluators(("gemini",), output_modes)["gemini"]
-        )
-    if selected_model is not None:
-        config_hashes["okmd"] = _configuration_hash(
-            _provider_evaluators(("okmd",), output_modes, selected_model)["okmd"]
-        )
+    config_hashes = {
+        provider: _configuration_hash(_provider_evaluators((provider,), output_modes)[provider])
+        for provider in selected_providers
+    }
+    preflight_requests = gemini_result["requests_used"]
+    repair_requests = prior_repair_requests + preflight_requests
+    pilot_prompts = [
+        render_judge_prompt(context, response) for context, response in pilot_examples.values()
+    ]
+    pilot_token_estimate = estimate_pilot_tokens(
+        pilot_prompts,
+        output_tokens=256,
+        safety_margin=0.25,
+    )
     return {
-        "schema_version": "phase5a-preflight-v3",
+        "schema_version": "phase5a-preflight-v4",
         "prompt_version": JUDGE_PROMPT_VERSION,
         "prompt_sha256": JUDGE_PROMPT_SHA256,
         "schema_version_judge": JUDGE_SCHEMA_VERSION,
@@ -437,24 +431,23 @@ def _preflight(
         "prior_repair_requests": prior_repair_requests,
         "repair_external_requests": repair_requests,
         "external_requests": prior_external_requests + repair_requests,
-        "preflight_requests": call_count,
+        "preflight_requests": preflight_requests,
         "selected_providers": selected_providers,
         "output_modes": output_modes,
         "provider_config_hashes": config_hashes,
         "providers": results,
-        "okmd_model_discovery": {
-            "snapshot": str(OKMD_DISCOVERY_SNAPSHOT.relative_to(REPO_ROOT)),
-            "catalog_count": len(catalog),
-            "candidates_found": [
-                {"model_id": model.model_id, "name": model.name, "family": model_family(model)}
-                for model in candidates
-            ],
+        "readiness": readiness,
+        "llm_judge_ready": readiness["llm_judge_ready"],
+        "multi_provider_ready": readiness["multi_provider_ready"],
+        "pilot_manifest_validation": "PASS",
+        "gemini_pilot_token_estimate": pilot_token_estimate,
+        "consistency_plan": {
+            "seed": 20260826,
+            "per_stratum": 2,
+            "requests_per_provider": 24,
         },
-        "okmd_candidates": candidate_results,
-        "okmd_selection": selected_model,
-        "okmd_pilot_token_estimate": estimated_tokens,
-        "okmd_quota_gate": selected_quota_gate,
-        "model_diversity": "PASS" if selected_model is not None else "BLOCKED",
+        "okmd_benchmark_status": "DEFERRED_RUNTIME_CONTRACT_MISMATCH",
+        "multi_provider_deferral": "DEFERRED_SINGLE_PROVIDER_PILOT",
     }
 
 
@@ -488,24 +481,32 @@ def _prior_repair_requests(path: Path) -> int:
 
 def _validate_preflight(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    selected_providers = payload.get("selected_providers") if isinstance(payload, dict) else None
+    readiness = payload.get("readiness") if isinstance(payload, dict) else None
     if (
         not isinstance(payload, dict)
         or not isinstance(payload.get("external_requests"), int)
         or not isinstance(payload.get("repair_external_requests"), int)
         or payload.get("repair_external_requests") < 0
         or payload.get("repair_external_requests") > 300
-        or not isinstance(payload.get("selected_providers"), list)
-        or len(payload.get("selected_providers", [])) != 2
-        or payload.get("selected_providers", [None])[0] != "gemini"
-        or payload.get("selected_providers", [None, None])[1] != "okmd"
-        or payload.get("model_diversity") != "PASS"
-        or not isinstance(payload.get("okmd_quota_gate"), dict)
-        or payload["okmd_quota_gate"].get("status") != "PASS"
+        or not isinstance(selected_providers, list)
+        or not selected_providers
+        or len(selected_providers) != len(set(selected_providers))
+        or not isinstance(readiness, dict)
+        or readiness.get("llm_judge_ready") is not True
+        or readiness.get("qualified_providers") != selected_providers
     ):
-        raise RuntimeError("preflight artifact is missing a valid repaired-provider gate")
-    for provider in payload["selected_providers"]:
+        raise RuntimeError("preflight artifact is missing a valid LLM judge readiness gate")
+    for provider in selected_providers:
         result = payload.get("providers", {}).get(provider, {})
-        if result.get("api_success_count") != 2 or result.get("parse_success_count") != 2:
+        api_success_count = result.get("api_success_count")
+        parse_success_count = result.get("parse_success_count")
+        if (
+            not isinstance(api_success_count, int)
+            or not isinstance(parse_success_count, int)
+            or api_success_count <= 0
+            or api_success_count != parse_success_count
+        ):
             raise RuntimeError(f"PROVIDER_PREFLIGHT_BLOCKED={provider}")
     return payload
 
@@ -604,15 +605,20 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
     selected_providers = tuple(preflight["selected_providers"])
     dataset = _load_dataset(args.data_dir)
     manifest = _load_or_create_manifest(dataset, args.manifest, sample_only=False)
-    if len(manifest.example_ids) != 120:
-        raise RuntimeError(
-            f"pilot manifest must contain 120 examples, found {len(manifest.example_ids)}"
-        )
-    examples = {
-        example.example_id: (example.source_context, example.response)
-        for example in dataset.examples
-        if example.example_id in set(manifest.example_ids)
+    _validate_pilot_manifest(manifest)
+    examples = _build_pilot_examples(dataset, manifest)
+    expected_ids = set(manifest.example_ids)
+    ground_truth = {record.example_id: record.human_label for record in manifest.records}
+    metadata = {record.example_id: {"task_type": record.task_type} for record in manifest.records}
+    baseline_predictions = {
+        "heuristic": _artifact_predictions(HEURISTIC_ARTIFACT, expected_ids),
+        "hhem": _artifact_predictions(HHEM_ARTIFACT, expected_ids),
     }
+    baseline_id_match = {
+        name: set(values) == expected_ids for name, values in baseline_predictions.items()
+    }
+    if not all(baseline_id_match.values()):
+        raise RuntimeError("baseline ID alignment failed before external provider execution")
     evaluators = _provider_evaluators(
         selected_providers,
         preflight["output_modes"],
@@ -627,10 +633,8 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         {name: evaluator.evaluate_with_trace for name, evaluator in evaluators.items()},
         state,
         budget,
-        parse_regenerations={"okmd": 1},
+        parse_regenerations={"okmd": 1} if "okmd" in selected_providers else None,
     )
-    ground_truth = {record.example_id: record.human_label for record in manifest.records}
-    metadata = {record.example_id: {"task_type": record.task_type} for record in manifest.records}
     provider_records = {
         provider: [record for record in records if record.provider == provider]
         for provider in selected_providers
@@ -642,12 +646,7 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
                 evaluators[provider], provider_records[provider], manifest
             ),
         }
-        for provider in OFFICIAL_PROVIDER_NAMES
-    }
-    expected_ids = set(manifest.example_ids)
-    baseline_predictions = {
-        "heuristic": _artifact_predictions(HEURISTIC_ARTIFACT, expected_ids),
-        "hhem": _artifact_predictions(HHEM_ARTIFACT, expected_ids),
+        for provider in selected_providers
     }
     provider_predictions = {
         provider: _record_map(provider_records[provider]) for provider in selected_providers
@@ -658,28 +657,17 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
     }
     comparisons: dict[str, Any] = {}
     if all(id_match.values()):
-        secondary_provider = selected_providers[1]
-        comparisons = {
-            "gemini_vs_hhem": compare_pilot_predictions(
-                ground_truth, baseline_predictions["hhem"], provider_predictions["gemini"]
-            ),
-            f"{secondary_provider}_vs_hhem": compare_pilot_predictions(
-                ground_truth, baseline_predictions["hhem"], provider_predictions[secondary_provider]
-            ),
-            "gemini_vs_heuristic": compare_pilot_predictions(
-                ground_truth, baseline_predictions["heuristic"], provider_predictions["gemini"]
-            ),
-            f"{secondary_provider}_vs_heuristic": compare_pilot_predictions(
-                ground_truth,
-                baseline_predictions["heuristic"],
-                provider_predictions[secondary_provider],
-            ),
-            f"gemini_vs_{secondary_provider}": compare_pilot_predictions(
-                ground_truth,
-                provider_predictions["gemini"],
-                provider_predictions[secondary_provider],
-            ),
-        }
+        for provider in selected_providers:
+            comparisons[f"{provider}_vs_hhem"] = compare_pilot_predictions(
+                ground_truth, baseline_predictions["hhem"], provider_predictions[provider]
+            )
+            comparisons[f"{provider}_vs_heuristic"] = compare_pilot_predictions(
+                ground_truth, baseline_predictions["heuristic"], provider_predictions[provider]
+            )
+        for left, right in combinations(selected_providers, 2):
+            comparisons[f"{left}_vs_{right}"] = compare_pilot_predictions(
+                ground_truth, provider_predictions[left], provider_predictions[right]
+            )
     else:
         comparisons["status"] = "SKIPPED_ID_MISMATCH"
     complete_predictions = {**baseline_predictions, **provider_predictions}
@@ -701,11 +689,17 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         "prompt_sha256": JUDGE_PROMPT_SHA256,
         "judge_schema_version": JUDGE_SCHEMA_VERSION,
         "selected_providers": list(selected_providers),
-        "secondary_provider": selected_providers[1],
+        "secondary_provider": None,
         "output_modes": preflight["output_modes"],
         "provider_config_hashes": preflight["provider_config_hashes"],
         "git_commit": _git_head(),
         "id_match_check": id_match,
+        "pilot_id_match": all(id_match.values()),
+        "leakage_check": "PASS",
+        "llm_judge_ready": preflight["llm_judge_ready"],
+        "multi_provider_ready": preflight["multi_provider_ready"],
+        "provider_readiness": preflight["readiness"],
+        "multi_provider_deferral": preflight["multi_provider_deferral"],
         "providers": provider_summaries,
         "heuristic_pilot_results": _baseline_summary(
             "heuristic-baseline", baseline_predictions["heuristic"], ground_truth, metadata
@@ -730,21 +724,28 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
 def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
     report = json.loads(args.report.read_text(encoding="utf-8"))
     selected_providers = tuple(report.get("selected_providers", ()))
-    if len(selected_providers) != 2:
-        raise RuntimeError("consistency requires a completed two-provider pilot")
+    if not selected_providers:
+        raise RuntimeError("consistency requires a completed LLM judge pilot")
     manifest = PilotManifest.model_validate_json(args.manifest.read_text(encoding="utf-8"))
+    _validate_pilot_manifest(manifest)
     consistency = build_consistency_manifest(manifest)
     current_requests = int(report.get("external_requests", 0))
-    if current_requests + 48 > 300:
+    consistency_requests = 24 * len(selected_providers)
+    if current_requests + consistency_requests > 300:
         report["consistency_run"] = "QUOTA_BLOCKED"
         _write_json(args.report, report)
         return report
     dataset = _load_dataset(args.data_dir)
+    dataset_examples = {example.example_id: example for example in dataset.examples}
     examples = {
-        example.example_id: (example.source_context, example.response)
-        for example in dataset.examples
-        if example.example_id in set(consistency.example_ids)
+        record.example_id: (
+            dataset_examples[record.example_id].source_context,
+            dataset_examples[record.example_id].response,
+        )
+        for record in consistency.records
+        if record.example_id in dataset_examples
     }
+    _assert_no_prompt_leakage(examples)
     evaluators = _provider_evaluators(
         selected_providers,
         report.get("output_modes", {}),
@@ -764,7 +765,7 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
             repeat_state,
             budget,
             max_retries=0,
-            parse_regenerations={"okmd": 1},
+            parse_regenerations={"okmd": 1} if "okmd" in selected_providers else None,
         )
         for record in repeat_records:
             repeated[record.provider].append(record)
@@ -846,7 +847,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ensure_ascii=False,
             )
         )
-        return 0 if len(payload["selected_providers"]) == 2 else 2
+        return 0 if payload.get("llm_judge_ready") is True else 2
     try:
         report = _run_consistency(args) if args.consistency else _run_base(args)
     except (OSError, ValueError, RuntimeError, PilotRequestLimitError) as error:

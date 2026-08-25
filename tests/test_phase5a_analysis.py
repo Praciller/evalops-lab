@@ -147,6 +147,41 @@ def test_multi_evaluator_analysis_uses_human_as_reference_without_voting() -> No
     assert analysis["complete_example_count"] == 2
 
 
+def test_multi_evaluator_analysis_supports_three_evaluators_without_llm_voting() -> None:
+    ground_truth = {
+        "all": HallucinationLabel.GROUNDED,
+        "gemini_only": HallucinationLabel.GROUNDED,
+        "hhem_only": HallucinationLabel.GROUNDED,
+    }
+    predictions = {
+        "heuristic": {
+            "all": _prediction("all", HallucinationLabel.GROUNDED),
+            "gemini_only": _prediction("gemini_only", HallucinationLabel.HALLUCINATED),
+            "hhem_only": _prediction("hhem_only", HallucinationLabel.HALLUCINATED),
+        },
+        "hhem": {
+            "all": _prediction("all", HallucinationLabel.GROUNDED),
+            "gemini_only": _prediction("gemini_only", HallucinationLabel.HALLUCINATED),
+            "hhem_only": _prediction("hhem_only", HallucinationLabel.GROUNDED),
+        },
+        "gemini": {
+            "all": _prediction("all", HallucinationLabel.GROUNDED),
+            "gemini_only": _prediction("gemini_only", HallucinationLabel.GROUNDED),
+            "hhem_only": _prediction("hhem_only", HallucinationLabel.HALLUCINATED),
+        },
+    }
+
+    analysis = build_multi_evaluator_analysis(ground_truth, predictions)
+
+    assert analysis["complete_example_count"] == 3
+    assert analysis["categories"]["ALL_EVALUATORS_CORRECT"] == ["all"]
+    assert analysis["categories"]["GEMINI_AND_HHEM_CORRECT"] == []
+    assert analysis["categories"]["GEMINI_AND_HEURISTIC_CORRECT"] == []
+    assert analysis["categories"]["HHEM_AND_HEURISTIC_CORRECT"] == []
+    assert analysis["categories"]["GEMINI_ONLY_CORRECT"] == ["gemini_only"]
+    assert analysis["categories"]["HHEM_ONLY_CORRECT"] == ["hhem_only"]
+
+
 def test_consistency_reports_pairwise_and_unanimous_agreement() -> None:
     records = [
         _record("a", HallucinationLabel.GROUNDED, attempt=1),

@@ -4,6 +4,13 @@ Phase 5A is a bounded evaluator-validation experiment. RAGTruth human labels
 remain the ground truth; an LLM judge is a model-generated prediction and does
 not replace the human annotation, heuristic baseline, or HHEM result.
 
+The current Phase 5A experiment is a **generic single-provider LLM judge
+validation pilot**. The readiness gate accepts any provider that completes the
+synthetic structured-output preflight; this run uses Gemini Direct because it
+is the only provider that qualified. Multi-provider comparison is a separate
+deferred scope and is not required to validate one judge against human labels,
+HHEM, and the heuristic baseline.
+
 ## Frozen evaluation contract
 
 The task is strict groundedness under the pinned RAGTruth policy
@@ -92,6 +99,11 @@ regeneration produced parseable `choices[0].message.content` under
 120-example quota gate also remained unverified. The OKMD gateway therefore did
 not qualify as the secondary judge, and the pilot was not started.
 
+5. Cerebras was checked as a possible additional provider but its quota was
+exhausted, so it was not retried or admitted. ThaiLLM was policy-blocked and
+was not used. These provider results and the OKMD adapter remain preserved as
+provenance and future-provider work; they do not expand the current pilot.
+
 Provider output mode is recorded separately from judge semantics. The supported
 paths are `json-schema-strict`, `json-schema-best-effort`,
 `json-object-local-validation`, and `json-text-local-validation`. Every path is
@@ -127,18 +139,15 @@ python scripts/run_phase5a_pilot.py --consistency
 ```
 
 Each synthetic preflight call counts toward a fresh 300-request repair ceiling.
-The repair ledger is separate from the six requests consumed by the prior
-blocked attempt. A valid preflight requires two synthetic cases per selected
-provider, so the minimum is four new calls. The base pilot uses 240 calls. The
-optional consistency subset uses 12 IDs, two additional evaluations per
-provider/ID, and at most 48 calls, for 292 new calls including preflight.
-The initial repair recorded 9 new provider requests after 6 prior blocked
-attempt requests. The first OKMD qualification then recorded 9 additional
-requests (one discovery, two Gemini confirmations, and six candidate calls).
-After the empty-content regeneration fix, the same cached discovery catalog
-was requalified with 14 additional requests; the cumulative artifact records
-38 observed external requests. Neither the pilot nor consistency requests were
-started.
+The repair ledger is separate from the historical provider attempts. The
+current single-provider preflight requires two synthetic calls. The nominal
+base pilot uses 120 calls, for 122 calls including preflight. The optional
+consistency subset uses 12 IDs, two additional evaluations per ID, and at most
+24 calls for one provider, for 146 nominal calls including preflight. Runtime
+retries and bounded parse regenerations still consume the same hard 300-request
+budget. The historical ledger records the earlier Gemini/Groq/OpenRouter and
+OKMD qualification attempts; the current pilot does not repeat those deferred
+provider checks.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
 
@@ -151,12 +160,15 @@ prediction.
 ## Comparisons and decision boundary
 
 The pilot restricts heuristic and HHEM artifacts to exactly the same 120 IDs.
-It reports each judge against human labels and paired comparisons against HHEM,
-the heuristic, and the other judge. It also reports HHEM/heuristic false
-negatives and false positives fixed by each judge, new judge errors, and
-multi-evaluator correctness categories. Human labels remain authoritative; no
-majority vote is used.
+It reports the selected judge against human labels and paired comparisons
+against HHEM and the heuristic. It also reports HHEM/heuristic false negatives
+and false positives fixed by the judge, new judge errors, and three-evaluator
+correctness categories. Human labels remain authoritative; no majority vote is
+used. The report sets `multi_provider_ready=false` for this scope and does not
+invent a secondary-provider comparison.
 
 A strong pilot result does not authorize the full 2,675-example evaluation.
 Phase 5A ends with a documented `PHASE5B_RECOMMENDED_JUDGE` and owner review.
-The full RAGTruth run is a separate Phase 5B decision.
+The full RAGTruth run is a separate Phase 5B decision. The single-provider
+pilot recommendation is therefore a validation input, not authorization for a
+full Gemini run.

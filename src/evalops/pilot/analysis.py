@@ -332,6 +332,9 @@ def build_multi_evaluator_analysis(
         "GROQ_ONLY_CORRECT": [],
         "HHEM_ONLY_CORRECT": [],
         "HEURISTIC_ONLY_CORRECT": [],
+        "GEMINI_AND_HHEM_CORRECT": [],
+        "GEMINI_AND_HEURISTIC_CORRECT": [],
+        "HHEM_AND_HEURISTIC_CORRECT": [],
     }
     names = list(predictions)
     for example_id in sorted(complete_ids):
@@ -352,6 +355,14 @@ def build_multi_evaluator_analysis(
             and not correctness.get("groq")
         ):
             categories["HHEM_CORRECT_BOTH_LLM_WRONG"].append(example_id)
+        if correct_count == 2:
+            for pair_names, category in (
+                (("gemini", "hhem"), "GEMINI_AND_HHEM_CORRECT"),
+                (("gemini", "heuristic"), "GEMINI_AND_HEURISTIC_CORRECT"),
+                (("hhem", "heuristic"), "HHEM_AND_HEURISTIC_CORRECT"),
+            ):
+                if all(correctness.get(name) for name in pair_names):
+                    categories[category].append(example_id)
         if correct_count == 1:
             for name, category in (
                 ("gemini", "GEMINI_ONLY_CORRECT"),

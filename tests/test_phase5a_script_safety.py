@@ -1,22 +1,95 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
+
+from evalops.models.hallucination import HallucinationLabel
+from evalops.pilot.models import PilotExampleMetadata, PilotManifest
 from scripts.run_phase5a_pilot import (
     OFFICIAL_PROVIDER_NAMES,
+    _assert_no_prompt_leakage,
+    _validate_pilot_manifest,
+    _validate_preflight,
     estimate_request_count,
     preflight_request_count,
 )
 
 
 def test_official_provider_scope_excludes_non_reproducible_or_blocked_paths() -> None:
-    assert OFFICIAL_PROVIDER_NAMES == ("gemini", "okmd")
+    assert OFFICIAL_PROVIDER_NAMES == ("gemini",)
 
 
 def test_request_estimate_respects_the_300_request_ceiling() -> None:
-    assert estimate_request_count(120, include_consistency=False) == 249
-    assert estimate_request_count(120, include_consistency=True) == 297
-    assert estimate_request_count(121, include_consistency=True) == 299
+    assert estimate_request_count(120, include_consistency=False) == 122
+    assert estimate_request_count(120, include_consistency=True) == 146
+    assert estimate_request_count(121, include_consistency=True) == 147
 
 
 def test_preflight_request_count_preserves_real_requests_across_restarts() -> None:
-    assert preflight_request_count(0) == 9
-    assert preflight_request_count(2) == 11
+    assert preflight_request_count(0) == 2
+    assert preflight_request_count(2) == 4
+
+
+def test_frozen_manifest_requires_the_exact_six_balanced_strata() -> None:
+    records = [
+        PilotExampleMetadata(
+            example_id=f"{index}",
+            source_id=f"source-{index}",
+            task_type=task_type,
+            human_label=label,
+            stratum=f"{task_type}:{label.value}",
+        )
+        for index, (task_type, label) in enumerate(
+            (task_type, label)
+            for task_type in ("Data2txt", "QA", "Summary")
+            for label in HallucinationLabel
+            for _ in range(20)
+        )
+    ]
+    manifest = PilotManifest(
+        pilot_id="ragtruth-llm-judge-pilot-v1",
+        manifest_version="ragtruth-llm-judge-manifest-v1",
+        dataset_revision="fixture",
+        split="test",
+        quality_filter=["good"],
+        sampling_seed=20260825,
+        sampling_strategy="fixture",
+        records=records,
+    )
+
+    _validate_pilot_manifest(manifest)
+
+
+def test_prompt_leakage_guard_accepts_only_context_response_pairs() -> None:
+    _assert_no_prompt_leakage({"example": ("context", "response")})
+
+    with pytest.raises(ValueError, match="context/response pairs"):
+        _assert_no_prompt_leakage({"example": {"context": "context", "label": "GROUNDED"}})
+
+
+def test_preflight_gate_accepts_a_generic_single_provider(tmp_path: Path) -> None:
+    artifact = tmp_path / "preflight.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "external_requests": 4,
+                "repair_external_requests": 4,
+                "selected_providers": ["fake-provider"],
+                "readiness": {
+                    "llm_judge_ready": True,
+                    "qualified_providers": ["fake-provider"],
+                },
+                "providers": {
+                    "fake-provider": {
+                        "api_success_count": 2,
+                        "parse_success_count": 2,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _validate_preflight(artifact)["selected_providers"] == ["fake-provider"]

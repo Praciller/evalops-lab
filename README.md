@@ -45,8 +45,9 @@ results.
 - RAGTruth human-label normalization, strict/factual annotation policies, quality filtering, deterministic heuristic hallucination evaluation, and failure analysis.
 - Optional pinned HHEM-2.1-Open model evaluation with reviewed custom-code hashes, deterministic context construction, threshold leakage protection, and paired McNemar comparison.
 - Phase 5A LLM judge pilot framework with frozen strict-groundedness contracts,
-  Gemini/Groq adapters, deterministic balanced sampling, resumable bounded
-  execution, and aggregate comparison tooling. See
+  provider-independent readiness, preserved Gemini/Groq/OpenRouter/OKMD
+  adapters, deterministic balanced sampling, resumable bounded execution, and
+  aggregate comparison tooling. See
   [`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md).
 
 ## Evaluation layers
