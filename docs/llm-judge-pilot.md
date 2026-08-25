@@ -62,7 +62,7 @@ use are the primary evidence.
 
 ## Providers and provenance
 
-The official comparison includes only:
+The provider chronology is intentionally preserved:
 
 1. Gemini Direct, `gemini-2.5-flash-lite`, using Gemini `generateContent`
    structured JSON (`responseMimeType=application/json` plus
@@ -71,11 +71,26 @@ The official comparison includes only:
    `INVALID_ARGUMENT`; the adapter now uses the direct native fields. The supported
    REST configuration is documented in [Gemini structured output
    documentation](https://ai.google.dev/gemini-api/docs/structured-output).
-2. Groq, `openai/gpt-oss-20b`, using strict JSON Schema Structured Outputs,
+2. The initial secondary path was Groq, `openai/gpt-oss-20b`, using strict JSON Schema Structured Outputs,
    `temperature=0`, `top_p=1`, `include_reasoning=false`, and
    `reasoning_effort=low`. Groq documents strict mode requirements that all
    properties be required and objects use `additionalProperties=false` in its
    [Structured Outputs guide](https://console.groq.com/docs/structured-outputs).
+
+3. Groq basic completion returned an account-level HTTP 403 even without
+structured-output parameters; the provider did not return a safe error object,
+so its permission code was not guessed. The OpenRouter fallback was then
+tested but returned one locally invalid/unfinished JSON response and one HTTP
+503. It was not admitted to the pilot.
+4. OKMD was then tested through
+`https://gen.ai.kku.ac.th/okmd/api/v1`. Live discovery found 24 catalog models;
+the bounded deterministic candidate order tested `deepseek-v4-flash`,
+`deepseek-v4-pro`, and `qwen3.6-flash`. Each candidate returned API success for
+both synthetic cases, but neither the initial attempt nor one bounded
+regeneration produced parseable `choices[0].message.content` under
+`json-text-local-validation`. No quota metadata was returned, so the mandatory
+120-example quota gate also remained unverified. The OKMD gateway therefore did
+not qualify as the secondary judge, and the pilot was not started.
 
 Provider output mode is recorded separately from judge semantics. The supported
 paths are `json-schema-strict`, `json-schema-best-effort`,
@@ -89,7 +104,10 @@ object, so its permission code remains unavailable rather than guessed. The
 OpenRouter fallback returned one API-successful but locally invalid/unfinished
 JSON response and one HTTP 503, so it did not qualify as the secondary judge.
 
-The provider adapter records requested and returned model identifiers, base URL
+For OKMD, the adapter records gateway, requested model ID, catalog name,
+returned model/provider fields when exposed, `backend_revision=unavailable`,
+quota fields when returned, and `routing_immutable=false`. It does not imply
+immutable backend reproducibility. The provider adapter records requested and returned model identifiers, base URL
 identifier, prompt/schema hashes, sampling/reasoning settings, dataset and
 manifest revisions, source Git SHA, usage when returned, and client-observed
 latency. It never records credentials, Authorization headers, credential
@@ -114,8 +132,13 @@ blocked attempt. A valid preflight requires two synthetic cases per selected
 provider, so the minimum is four new calls. The base pilot uses 240 calls. The
 optional consistency subset uses 12 IDs, two additional evaluations per
 provider/ID, and at most 48 calls, for 292 new calls including preflight.
-The repaired attempt recorded 9 new provider requests after 6 prior blocked
-attempt requests; neither the pilot nor consistency requests were started.
+The initial repair recorded 9 new provider requests after 6 prior blocked
+attempt requests. The first OKMD qualification then recorded 9 additional
+requests (one discovery, two Gemini confirmations, and six candidate calls).
+After the empty-content regeneration fix, the same cached discovery catalog
+was requalified with 14 additional requests; the cumulative artifact records
+38 observed external requests. Neither the pilot nor consistency requests were
+started.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
 
