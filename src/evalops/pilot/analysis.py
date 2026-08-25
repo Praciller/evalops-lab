@@ -231,6 +231,85 @@ def compare_pilot_predictions(
     }
 
 
+def recommend_phase5b_judge(
+    provider_summaries: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Select a complete pilot provider using a deterministic quality-first rule."""
+
+    candidates: list[dict[str, Any]] = []
+    for provider in sorted(provider_summaries):
+        summary = provider_summaries[provider]
+        if not (
+            summary.get("missing_count") == 0
+            and summary.get("api_success_rate") == 1.0
+            and summary.get("parse_success_rate") == 1.0
+        ):
+            continue
+        metrics = summary.get("metrics", {})
+        latency = summary.get("latency", {})
+        token_usage = summary.get("token_usage", {})
+        provenance = summary.get("provenance", {})
+        candidates.append(
+            {
+                "provider": provider,
+                "model": provenance.get("requested_model"),
+                "balanced_accuracy": metrics.get("balanced_accuracy", 0.0),
+                "f1": metrics.get("f1", 0.0),
+                "false_positive_rate": metrics.get("false_positive_rate", 1.0),
+                "parse_success_rate": summary.get("parse_success_rate", 0.0),
+                "p95_ms": latency.get("p95_ms", float("inf")),
+                "total_tokens": token_usage.get("total_tokens", float("inf")),
+            }
+        )
+
+    candidates.sort(
+        key=lambda candidate: (
+            -float(candidate["balanced_accuracy"]),
+            -float(candidate["f1"]),
+            float(candidate["false_positive_rate"]),
+            -float(candidate["parse_success_rate"]),
+            float(candidate["p95_ms"]),
+            float(candidate["total_tokens"]),
+            str(candidate["provider"]),
+        )
+    )
+    ranking = [
+        {
+            "provider": candidate["provider"],
+            "model": candidate["model"],
+            "balanced_accuracy": candidate["balanced_accuracy"],
+            "f1": candidate["f1"],
+            "false_positive_rate": candidate["false_positive_rate"],
+            "parse_success_rate": candidate["parse_success_rate"],
+            "p95_ms": candidate["p95_ms"],
+            "total_tokens": candidate["total_tokens"],
+        }
+        for candidate in candidates
+    ]
+    if not candidates:
+        return {
+            "status": "UNVERIFIED",
+            "provider": None,
+            "model": None,
+            "ranking": [],
+            "rationale": (
+                "No provider completed the pilot with API and parse success for every example."
+            ),
+        }
+    winner = candidates[0]
+    return {
+        "status": "RECOMMENDED",
+        "provider": winner["provider"],
+        "model": winner["model"],
+        "ranking": ranking,
+        "rationale": (
+            f"Selected {winner['provider']} by complete outputs, then balanced accuracy, F1, "
+            "lower false-positive rate, parse reliability, lower p95 latency, and lower "
+            "reported token use."
+        ),
+    }
+
+
 def build_multi_evaluator_analysis(
     ground_truth: Mapping[str, HallucinationLabel],
     predictions: Mapping[str, Mapping[str, HallucinationPrediction]],

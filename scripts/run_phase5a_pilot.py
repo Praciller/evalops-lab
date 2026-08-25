@@ -36,6 +36,7 @@ from evalops.models.hallucination import (
 from evalops.pilot.analysis import (
     build_multi_evaluator_analysis,
     compare_pilot_predictions,
+    recommend_phase5b_judge,
     summarize_consistency,
     summarize_provider_records,
 )
@@ -63,6 +64,14 @@ def estimate_request_count(pilot_size: int, *, include_consistency: bool) -> int
     """Estimate preflight, base, and optional consistency requests."""
 
     return 2 + (2 * pilot_size) + (48 if include_consistency else 0)
+
+
+def preflight_request_count(previous_external_requests: int) -> int:
+    """Add the two provider calls while preserving prior real requests."""
+
+    if previous_external_requests < 0:
+        raise ValueError("previous external request count cannot be negative")
+    return previous_external_requests + 2
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -131,7 +140,7 @@ def _provider_evaluators() -> dict[str, LLMJudgeEvaluator]:
     }
 
 
-def _preflight() -> dict[str, Any]:
+def _preflight(*, prior_requests: int = 0) -> dict[str, Any]:
     evaluators = _provider_evaluators()
     results: dict[str, Any] = {}
     for provider in OFFICIAL_PROVIDER_NAMES:
@@ -159,16 +168,35 @@ def _preflight() -> dict[str, Any]:
         "prompt_version": JUDGE_PROMPT_VERSION,
         "prompt_sha256": JUDGE_PROMPT_SHA256,
         "schema_version_judge": JUDGE_SCHEMA_VERSION,
-        "external_requests": 2,
+        "external_requests": preflight_request_count(prior_requests),
+        "preflight_requests": 2,
         "providers": results,
     }
     return payload
 
 
+def _prior_preflight_requests(path: Path) -> int:
+    if not path.exists():
+        return 0
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("external_requests"), int):
+        raise RuntimeError("existing preflight artifact has no valid request ledger")
+    previous = int(payload["external_requests"])
+    if previous < 0 or previous > 300:
+        raise RuntimeError("existing preflight artifact has an invalid request ledger")
+    return previous
+
+
 def _validate_preflight(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict) or payload.get("external_requests") != 2:
-        raise RuntimeError("preflight artifact is missing its two-request budget record")
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get("external_requests"), int)
+        or payload.get("external_requests") < 2
+        or payload.get("external_requests") > 300
+        or payload.get("preflight_requests") != 2
+    ):
+        raise RuntimeError("preflight artifact is missing its cumulative request ledger")
     for provider in OFFICIAL_PROVIDER_NAMES:
         result = payload.get("providers", {}).get(provider, {})
         if (
@@ -355,6 +383,7 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         ),
         "comparisons": comparisons,
         "multi_evaluator_analysis": multi,
+        "phase5b_recommendation": recommend_phase5b_judge(provider_summaries),
         "external_requests": budget.requests_used,
         "quota_status": "AVAILABLE_WITHIN_300_REQUEST_CEILING",
         "cost_status": "PROVIDER_REPORTED_ONLY",
@@ -452,11 +481,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     if args.preflight_mode:
-        payload = _preflight()
+        prior_requests = _prior_preflight_requests(args.preflight_artifact)
+        if preflight_request_count(prior_requests) > 300:
+            print(json.dumps({"error": "preflight request budget would exceed 300"}))
+            return 2
+        payload = _preflight(prior_requests=prior_requests)
         _write_json(args.preflight_artifact, payload)
         print(
             json.dumps(
-                {"external_requests": 2, "providers": payload["providers"]}, ensure_ascii=False
+                {
+                    "external_requests": payload["external_requests"],
+                    "providers": payload["providers"],
+                },
+                ensure_ascii=False,
             )
         )
         return (

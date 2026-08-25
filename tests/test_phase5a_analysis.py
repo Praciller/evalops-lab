@@ -7,6 +7,7 @@ from evalops.models.hallucination import HallucinationLabel, HallucinationPredic
 from evalops.pilot.analysis import (
     build_multi_evaluator_analysis,
     compare_pilot_predictions,
+    recommend_phase5b_judge,
     summarize_consistency,
     summarize_provider_records,
 )
@@ -163,3 +164,66 @@ def test_consistency_reports_pairwise_and_unanimous_agreement() -> None:
     assert report["unanimous_agreement_rate"] == 0.5
     assert report["disagreement_examples"] == ["a"]
     assert report["confidence"]["min"] == 0.8
+
+
+def test_phase5b_recommendation_ranks_complete_providers_by_quality_then_cost_signals() -> None:
+    summaries = {
+        "gemini": {
+            "evaluated_count": 120,
+            "missing_count": 0,
+            "api_success_rate": 1.0,
+            "parse_success_rate": 1.0,
+            "metrics": {
+                "balanced_accuracy": 0.8,
+                "f1": 0.8,
+                "false_positive_rate": 0.2,
+            },
+            "latency": {"p95_ms": 100.0},
+            "token_usage": {"total_tokens": 1000},
+            "provenance": {"requested_model": "gemini-model"},
+        },
+        "groq": {
+            "evaluated_count": 120,
+            "missing_count": 0,
+            "api_success_rate": 1.0,
+            "parse_success_rate": 1.0,
+            "metrics": {
+                "balanced_accuracy": 0.8,
+                "f1": 0.8,
+                "false_positive_rate": 0.1,
+            },
+            "latency": {"p95_ms": 50.0},
+            "token_usage": {"total_tokens": 900},
+            "provenance": {"requested_model": "groq-model"},
+        },
+    }
+
+    recommendation = recommend_phase5b_judge(summaries)
+
+    assert recommendation["status"] == "RECOMMENDED"
+    assert recommendation["provider"] == "groq"
+    assert recommendation["model"] == "groq-model"
+    assert recommendation["ranking"][0]["provider"] == "groq"
+
+
+def test_phase5b_recommendation_is_unverified_without_a_complete_provider() -> None:
+    recommendation = recommend_phase5b_judge(
+        {
+            "gemini": {
+                "evaluated_count": 1,
+                "missing_count": 1,
+                "api_success_rate": 0.0,
+                "parse_success_rate": 0.0,
+            }
+        }
+    )
+
+    assert recommendation == {
+        "status": "UNVERIFIED",
+        "provider": None,
+        "model": None,
+        "ranking": [],
+        "rationale": (
+            "No provider completed the pilot with API and parse success for every example."
+        ),
+    }

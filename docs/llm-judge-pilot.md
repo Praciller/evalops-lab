@@ -93,8 +93,9 @@ python scripts/run_phase5a_pilot.py --run --preflight-artifact reports/phase5a-p
 python scripts/run_phase5a_pilot.py --consistency
 ```
 
-The two synthetic preflight calls count toward a hard 300-request ceiling. The
-base pilot uses 240 calls. The optional consistency subset uses 12 IDs, two
+Each synthetic preflight call counts toward a hard 300-request ceiling. A
+preflight restart preserves the prior request ledger before adding its two new
+provider calls. The base pilot uses 240 calls. The optional consistency subset uses 12 IDs, two
 additional evaluations per provider/ID, and at most 48 calls, for 290 total.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
