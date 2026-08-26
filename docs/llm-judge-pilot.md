@@ -171,6 +171,13 @@ traces consistently report `gemini-2.5-flash-lite`; continuity is therefore
 `UNVERIFIED`, not asserted as a pass. No historical success was overwritten, no
 other provider was tried, and Phase 5B remains unauthorized.
 
+The second resume on 2026-08-27 performed a fresh health check successfully,
+then received explicit `RPD` exhaustion on the first pending ID (`10713`). It
+stopped before adding any primary prediction: 2 requests were used in that
+session, the cumulative lifetime ledger is 329, and all 102 IDs remain
+pending. This remains an incomplete operational result; no completion-result
+commit was created and no consistency calls were made.
+
 ## Comparisons and decision boundary
 
 The pilot restricts heuristic and HHEM artifacts to exactly the same 120 IDs.
