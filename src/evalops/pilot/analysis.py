@@ -63,13 +63,19 @@ def _token_summary(records: Sequence[PilotRunRecord]) -> dict[str, int | float]:
     totals: dict[str, int | float] = {
         "input_tokens": 0,
         "output_tokens": 0,
+        "thoughts_tokens": 0,
         "total_tokens": 0,
         "provider_reported_cost": 0.0,
     }
     aliases = {
-        "input_tokens": ("input_tokens", "prompt_tokens"),
-        "output_tokens": ("output_tokens", "completion_tokens"),
-        "total_tokens": ("total_tokens",),
+        "input_tokens": ("input_tokens", "prompt_tokens", "promptTokenCount"),
+        "output_tokens": (
+            "output_tokens",
+            "completion_tokens",
+            "candidatesTokenCount",
+        ),
+        "thoughts_tokens": ("thoughts_tokens", "thoughtsTokenCount"),
+        "total_tokens": ("total_tokens", "totalTokenCount"),
         "provider_reported_cost": ("cost",),
     }
     for record in records:

@@ -33,6 +33,9 @@ class JudgeEvaluationTrace(BaseModel):
     gateway: str | None = None
     catalog_model_name: str | None = None
     returned_model: str | None = None
+    model_version: str | None = None
+    response_id: str | None = None
+    observed_at: str | None = None
     returned_provider: str | None = None
     backend_revision: str | None = None
     prediction: HallucinationPrediction | None = None
@@ -57,6 +60,8 @@ class JudgeEvaluationTrace(BaseModel):
     quota: dict[str, int | float | str] | None = None
     request_id: str | None = None
     latency_ms: float | None = None
+    retry_after_seconds: float | None = None
+    rate_limit_dimension: str | None = None
     error_class: str | None = None
     safe_error_summary: str | None = None
 
@@ -170,6 +175,9 @@ class LLMJudgeEvaluator:
             gateway=call.gateway,
             catalog_model_name=call.catalog_model_name,
             returned_model=call.returned_model,
+            model_version=call.model_version,
+            response_id=call.response_id,
+            observed_at=call.observed_at,
             returned_provider=call.returned_provider,
             backend_revision=call.backend_revision,
             prediction=prediction,
@@ -194,6 +202,8 @@ class LLMJudgeEvaluator:
             quota=call.quota,
             request_id=call.request_id,
             latency_ms=call.latency_ms,
+            retry_after_seconds=call.retry_after_seconds,
+            rate_limit_dimension=call.rate_limit_dimension,
             error_class=error_class,
             safe_error_summary=safe_error_summary,
         )

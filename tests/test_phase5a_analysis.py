@@ -26,6 +26,7 @@ def _record(
     attempt: int = 1,
     confidence: float = 0.8,
     latency_ms: float = 10.0,
+    usage: dict[str, int] | None = None,
 ) -> PilotRunRecord:
     decision = None
     prediction = None
@@ -49,6 +50,8 @@ def _record(
         parse_success=label is not None,
         structured_output_status="PASS" if label is not None else "PARSE_FAILED",
         latency_ms=latency_ms,
+        usage=usage,
+        usage_metadata_present=usage is not None,
     )
     return PilotRunRecord(
         provider=provider,
@@ -84,6 +87,33 @@ def test_provider_summary_reuses_classification_metrics_and_counts_failures() ->
     assert report["parse_success_rate"] == 2 / 3
     assert report["missing_count"] == 1
     assert set(report["task_slices"]) == {"QA", "Summary"}
+
+
+def test_provider_summary_aggregates_gemini_usage_metadata() -> None:
+    report = summarize_provider_records(
+        [
+            _record(
+                "a",
+                HallucinationLabel.GROUNDED,
+                usage={
+                    "promptTokenCount": 10,
+                    "candidatesTokenCount": 4,
+                    "thoughtsTokenCount": 2,
+                    "totalTokenCount": 16,
+                },
+            )
+        ],
+        {"a": HallucinationLabel.GROUNDED},
+        {"a": {"task_type": "QA"}},
+    )
+
+    assert report["token_usage"] == {
+        "input_tokens": 10,
+        "output_tokens": 4,
+        "thoughts_tokens": 2,
+        "total_tokens": 16,
+        "provider_reported_cost": 0.0,
+    }
 
 
 def test_pairwise_comparison_reports_fixed_and_new_errors() -> None:

@@ -8,8 +8,10 @@ import pytest
 from evalops.models.hallucination import HallucinationLabel
 from evalops.pilot.models import PilotExampleMetadata, PilotManifest
 from scripts.run_phase5a_pilot import (
+    FRESH_REQUEST_BUDGET,
     OFFICIAL_PROVIDER_NAMES,
     _assert_no_prompt_leakage,
+    _partition_resume_ids,
     _validate_pilot_manifest,
     _validate_preflight,
     estimate_request_count,
@@ -25,6 +27,10 @@ def test_request_estimate_respects_the_300_request_ceiling() -> None:
     assert estimate_request_count(120, include_consistency=False) == 122
     assert estimate_request_count(120, include_consistency=True) == 146
     assert estimate_request_count(121, include_consistency=True) == 147
+
+
+def test_resume_task_uses_a_fresh_180_request_budget() -> None:
+    assert FRESH_REQUEST_BUDGET == 180
 
 
 def test_preflight_request_count_preserves_real_requests_across_restarts() -> None:
@@ -93,3 +99,18 @@ def test_preflight_gate_accepts_a_generic_single_provider(tmp_path: Path) -> Non
     )
 
     assert _validate_preflight(artifact)["selected_providers"] == ["fake-provider"]
+
+
+def test_resume_partition_keeps_failed_and_never_attempted_ids_pending() -> None:
+    partition = _partition_resume_ids(
+        ["a", "b", "c", "d"],
+        successful_primary_ids={"a"},
+        attempted_ids={"a", "b"},
+    )
+
+    assert partition == {
+        "successful_primary_ids": ["a"],
+        "previous_failed_ids": ["b"],
+        "never_attempted_ids": ["c", "d"],
+        "pending_ids": ["b", "c", "d"],
+    }

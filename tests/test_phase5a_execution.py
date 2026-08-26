@@ -13,6 +13,11 @@ from evalops.pilot.execution import (
     run_provider_pilot,
 )
 from evalops.pilot.models import PilotExampleMetadata, PilotManifest
+from evalops.pilot.rate_limit import (
+    DailyQuotaExhaustedError,
+    RateAwareRequestScheduler,
+    RateLimitCircuitBreakerError,
+)
 
 
 def _manifest() -> PilotManifest:
@@ -157,3 +162,72 @@ def test_okmd_parse_failure_regenerates_once_with_same_evaluator(tmp_path: Path)
     assert calls == 2
     assert records[0].status == "SUCCESS"
     assert records[0].attempt == 2
+
+
+def test_rate_aware_scheduler_paces_requests_and_honors_retry_delay() -> None:
+    current_time = 0.0
+    sleeps: list[float] = []
+
+    def clock() -> float:
+        return current_time
+
+    def sleep(seconds: float) -> None:
+        nonlocal current_time
+        sleeps.append(seconds)
+        current_time += seconds
+
+    scheduler = RateAwareRequestScheduler(
+        min_interval_seconds=10.0,
+        clock=clock,
+        sleep=sleep,
+    )
+    scheduler.before_request()
+    scheduler.observe("API_SUCCESS")
+    scheduler.before_request()
+    scheduler.observe("API_RATE_LIMIT", retry_after_seconds=17.0)
+    scheduler.wait_before_retry()
+
+    assert sleeps == [10.0, 17.0]
+    assert scheduler.rate_limit_count == 1
+
+
+def test_rate_aware_scheduler_stops_after_three_consecutive_rate_limits() -> None:
+    scheduler = RateAwareRequestScheduler(min_interval_seconds=0.0, sleep=lambda _: None)
+
+    scheduler.observe("API_RATE_LIMIT")
+    scheduler.observe("API_RATE_LIMIT")
+    with pytest.raises(RateLimitCircuitBreakerError, match="RATE_LIMIT_STILL_BLOCKING"):
+        scheduler.observe("API_RATE_LIMIT")
+
+
+def test_rate_aware_scheduler_stops_immediately_on_daily_quota_metadata() -> None:
+    scheduler = RateAwareRequestScheduler(min_interval_seconds=0.0, sleep=lambda _: None)
+
+    with pytest.raises(DailyQuotaExhaustedError, match="DAILY_QUOTA_EXHAUSTED"):
+        scheduler.observe("API_RATE_LIMIT", rate_limit_dimension="RPD")
+
+
+def test_pilot_execution_uses_scheduler_and_preserves_failed_id_for_resume(tmp_path: Path) -> None:
+    calls = 0
+
+    def evaluator(context: str, response: str, example_id: str) -> JudgeEvaluationTrace:
+        nonlocal calls
+        calls += 1
+        return _trace(example_id, error_class="API_RATE_LIMIT")
+
+    state = PilotStateStore(tmp_path / "state.json")
+    scheduler = RateAwareRequestScheduler(min_interval_seconds=0.0, sleep=lambda _: None)
+    with pytest.raises(RateLimitCircuitBreakerError):
+        run_provider_pilot(
+            _manifest(),
+            {"a": ("context", "response")},
+            {"fake": evaluator},
+            state,
+            RequestBudget(10),
+            max_retries=2,
+            scheduler=scheduler,
+        )
+
+    assert calls == 3
+    assert state.get("fake", "a") is not None
+    assert state.get("fake", "a").status == "FAILED"

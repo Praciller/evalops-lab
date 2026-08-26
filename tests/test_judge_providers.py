@@ -51,6 +51,7 @@ def test_gemini_structured_request_uses_generate_content_schema() -> None:
                     }
                 ],
                 "modelVersion": "gemini-2.5-flash-lite",
+                "responseId": "response-1",
             },
         )
     )
@@ -67,6 +68,32 @@ def test_gemini_structured_request_uses_generate_content_schema() -> None:
     assert "responseFormat" not in generation_config
     assert call.assistant_content == '{"label":"GROUNDED"}'
     assert call.returned_model == "gemini-2.5-flash-lite"
+    assert call.model_version == "gemini-2.5-flash-lite"
+    assert call.response_id == "response-1"
+    assert call.observed_at is not None
+
+
+def test_gemini_rate_limit_captures_retry_delay_and_quota_dimension() -> None:
+    transport = QueueTransport(
+        ProviderHTTPResponse(
+            status_code=429,
+            headers={"Retry-After": "12"},
+            body={
+                "error": {
+                    "status": "RESOURCE_EXHAUSTED",
+                    "details": [{"quotaMetric": "GenerateRequestsPerMinutePerProject"}],
+                }
+            },
+        )
+    )
+    adapter = GeminiProviderAdapter("secret-not-persisted", transport=transport)
+
+    call = adapter.judge("prompt", schema=SCHEMA, config=SamplingConfig())
+
+    assert call.error_class == "API_RATE_LIMIT"
+    assert call.retry_after_seconds == 12.0
+    assert call.rate_limit_dimension == "RPM"
+    assert "Retry-After" not in call.safe_metadata_json()
 
 
 def test_groq_structured_request_is_strict_and_all_fields_required() -> None:

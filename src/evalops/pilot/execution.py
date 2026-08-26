@@ -10,6 +10,7 @@ from typing import Any
 
 from evalops.evaluators.judge.evaluator import JudgeEvaluationTrace
 from evalops.pilot.models import PilotManifest, PilotRunRecord, serialize_state_record
+from evalops.pilot.rate_limit import RateAwareRequestScheduler, RateLimitStopError
 
 
 class PilotRequestLimitError(RuntimeError):
@@ -95,6 +96,8 @@ def run_provider_pilot(
     max_retries: int = 2,
     retry_sleep: Callable[[float], None] = time.sleep,
     parse_regenerations: Mapping[str, int] | None = None,
+    scheduler: RateAwareRequestScheduler | None = None,
+    success_observer: Callable[[PilotRunRecord], None] | None = None,
 ) -> list[PilotRunRecord]:
     """Evaluate exact manifest IDs sequentially with bounded transient retries."""
 
@@ -115,7 +118,27 @@ def run_provider_pilot(
             regeneration_count = 0
             while True:
                 budget.reserve()
+                if scheduler is not None:
+                    scheduler.before_request()
                 trace = evaluator(context, response, example_id)
+                if scheduler is not None:
+                    try:
+                        scheduler.observe(
+                            trace.error_class,
+                            retry_after_seconds=trace.retry_after_seconds,
+                            rate_limit_dimension=trace.rate_limit_dimension,
+                        )
+                    except RateLimitStopError:
+                        attempt = retry_count + regeneration_count + 1
+                        failed_record = PilotRunRecord(
+                            provider=provider,
+                            example_id=example_id,
+                            attempt=attempt,
+                            status="FAILED",
+                            trace=trace,
+                        )
+                        state_store.upsert(failed_record)
+                        raise
                 if (
                     trace.prediction is None
                     and trace.api_success
@@ -132,6 +155,8 @@ def run_provider_pilot(
                     status="SUCCESS" if trace.prediction is not None else "FAILED",
                     trace=trace,
                 )
+                if record.trace.prediction is not None and success_observer is not None:
+                    success_observer(record)
                 state_store.upsert(record)
                 if trace.prediction is not None:
                     results.append(record)
@@ -140,5 +165,8 @@ def run_provider_pilot(
                     results.append(record)
                     break
                 retry_count += 1
-                retry_sleep(min(2.0, 0.1 * (2 ** (retry_count - 1))))
+                if trace.error_class == "API_RATE_LIMIT" and scheduler is not None:
+                    scheduler.wait_before_retry(trace.retry_after_seconds)
+                else:
+                    retry_sleep(min(2.0, 0.1 * (2 ** (retry_count - 1))))
     return results

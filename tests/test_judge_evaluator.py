@@ -47,6 +47,7 @@ def test_gemini_response_maps_to_grounded_prediction() -> None:
                     }
                 ],
                 "modelVersion": "gemini-2.5-flash-lite",
+                "responseId": "response-1",
             }
         ),
     )
@@ -62,6 +63,9 @@ def test_gemini_response_maps_to_grounded_prediction() -> None:
     assert trace.provider_schema_enforced is True
     assert trace.local_schema_validated is True
     assert trace.parse_success is True
+    assert trace.model_version == "gemini-2.5-flash-lite"
+    assert trace.response_id == "response-1"
+    assert trace.observed_at is not None
 
 
 def test_groq_response_maps_to_hallucinated_prediction_and_ignores_reasoning() -> None:

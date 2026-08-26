@@ -7,6 +7,7 @@ import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -54,6 +55,9 @@ class ProviderCall:
     gateway: str | None = None
     catalog_model_name: str | None = None
     returned_model: str | None = None
+    model_version: str | None = None
+    response_id: str | None = None
+    observed_at: str | None = None
     returned_provider: str | None = None
     backend_revision: str | None = None
     api_success: bool = False
@@ -71,6 +75,8 @@ class ProviderCall:
     quota: dict[str, int | float | str] | None = None
     request_id: str | None = None
     latency_ms: float | None = None
+    retry_after_seconds: float | None = None
+    rate_limit_dimension: str | None = None
     structured_requested: bool = True
     requested_output_mode: str = JudgeOutputMode.JSON_SCHEMA_STRICT
     actual_output_mode: str = JudgeOutputMode.JSON_SCHEMA_STRICT
@@ -88,6 +94,9 @@ class ProviderCall:
             "gateway": self.gateway,
             "catalog_model_name": self.catalog_model_name,
             "returned_model": self.returned_model,
+            "model_version": self.model_version,
+            "response_id": self.response_id,
+            "observed_at": self.observed_at,
             "returned_provider": self.returned_provider,
             "backend_revision": self.backend_revision,
             "api_success": self.api_success,
@@ -104,6 +113,8 @@ class ProviderCall:
             "quota": self.quota,
             "request_id": self.request_id,
             "latency_ms": self.latency_ms,
+            "retry_after_seconds": self.retry_after_seconds,
+            "rate_limit_dimension": self.rate_limit_dimension,
             "structured_requested": self.structured_requested,
             "requested_output_mode": self.requested_output_mode,
             "actual_output_mode": self.actual_output_mode,
@@ -143,6 +154,50 @@ def _safe_usage(value: Any) -> dict[str, int | float | str] | None:
         if isinstance(item, (bool, int, float, str)) and ("token" in lowered or "cost" in lowered):
             safe[str(key)] = item
     return safe or None
+
+
+def _retry_after_seconds(response: ProviderHTTPResponse) -> float | None:
+    """Read a numeric retry delay without retaining provider response text."""
+
+    for key, header_value in response.headers.items():
+        if key.casefold() == "retry-after":
+            try:
+                delay = float(header_value)
+            except (TypeError, ValueError):
+                break
+            if delay >= 0:
+                return delay
+    details = response.body.get("error")
+    details = details.get("details") if isinstance(details, Mapping) else None
+    if isinstance(details, list):
+        for detail in details:
+            if not isinstance(detail, Mapping):
+                continue
+            for key in ("retryDelay", "retry_after", "retryAfter"):
+                detail_value = detail.get(key)
+                if isinstance(detail_value, (int, float)) and detail_value >= 0:
+                    return float(detail_value)
+                if isinstance(detail_value, str):
+                    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*s?\s*", detail_value)
+                    if match:
+                        return float(match.group(1))
+    return None
+
+
+def _rate_limit_dimension(response: ProviderHTTPResponse) -> str | None:
+    """Classify only explicit quota dimension metadata; never guess silently."""
+
+    if response.status_code != 429:
+        return None
+    error = response.body.get("error")
+    searchable = json.dumps(error, ensure_ascii=False).casefold()
+    if any(token in searchable for token in ("requestsperday", "requests_per_day", "rpd")):
+        return "RPD"
+    if any(token in searchable for token in ("tokensperminute", "tokens_per_minute", "tpm")):
+        return "TPM"
+    if any(token in searchable for token in ("requestsperminute", "requests_per_minute", "rpm")):
+        return "RPM"
+    return "OTHER"
 
 
 def _safe_quota(value: Any) -> dict[str, int | float | str] | None:
@@ -281,7 +336,9 @@ def _default_transport(
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             body = {}
         return ProviderHTTPResponse(
-            status_code=error.code, body=body if isinstance(body, dict) else {}
+            status_code=error.code,
+            body=body if isinstance(body, dict) else {},
+            headers=dict(error.headers.items()) if error.headers else {},
         )
     except (OSError, URLError, TimeoutError) as error:
         raise RuntimeError(_transport_error(error)) from error
@@ -320,6 +377,9 @@ def _common_call(
     returned_provider: str | None = None,
     backend_revision: str | None = None,
     quota: dict[str, int | float | str] | None = None,
+    model_version: str | None = None,
+    response_id: str | None = None,
+    observed_at: str | None = None,
 ) -> ProviderCall:
     usage = _safe_usage(response.body.get("usage") or response.body.get("usageMetadata"))
     api_success = 200 <= response.status_code < 300
@@ -329,6 +389,9 @@ def _common_call(
         gateway=gateway,
         catalog_model_name=catalog_model_name,
         returned_model=returned_model,
+        model_version=model_version,
+        response_id=response_id,
+        observed_at=observed_at or datetime.now(UTC).isoformat(),
         returned_provider=returned_provider,
         backend_revision=backend_revision,
         api_success=api_success,
@@ -346,6 +409,8 @@ def _common_call(
         quota=quota,
         request_id=response.headers.get("x-request-id"),
         latency_ms=latency_ms,
+        retry_after_seconds=_retry_after_seconds(response),
+        rate_limit_dimension=_rate_limit_dimension(response),
         structured_requested=structured_requested,
         requested_output_mode=output_mode,
         actual_output_mode=output_mode,
@@ -402,6 +467,7 @@ class _BaseProviderAdapter:
             actual_output_mode=self.output_mode,
             provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
             local_schema_validated=True,
+            observed_at=datetime.now(UTC).isoformat(),
             error_class=error_class,
             safe_error_summary="Provider request did not return a usable completion.",
         )
@@ -488,10 +554,16 @@ class GeminiProviderAdapter(_BaseProviderAdapter):
             response=normalized_response,
             latency_ms=latency_ms,
             content=content,
-            returned_model=(
+            returned_model=(self.model),
+            model_version=(
                 str(response.body["modelVersion"])
                 if response.body.get("modelVersion") is not None
-                else self.model
+                else None
+            ),
+            response_id=(
+                str(response.body["responseId"])
+                if response.body.get("responseId") is not None
+                else None
             ),
             response_object_type="generateContent",
             finish_reason=(
