@@ -119,12 +119,14 @@ JSON response and one HTTP 503, so it did not qualify as the secondary judge.
 For OKMD, the adapter records gateway, requested model ID, catalog name,
 returned model/provider fields when exposed, `backend_revision=unavailable`,
 quota fields when returned, and `routing_immutable=false`. It does not imply
-immutable backend reproducibility. The provider adapter records requested and returned model identifiers, base URL
-identifier, prompt/schema hashes, sampling/reasoning settings, dataset and
-manifest revisions, source Git SHA, usage when returned, and client-observed
-latency. It never records credentials, Authorization headers, credential
-fingerprints, raw provider JSON, source text, response text, or hidden
-reasoning.
+immutable backend reproducibility. The provider adapter records requested and
+returned model identifiers, base URL identifier, prompt/schema hashes,
+sampling/reasoning settings, dataset and manifest revisions, source Git SHA,
+usage when returned, response ID, and client-observed latency. It never records
+credentials, Authorization headers, credential fingerprints, raw provider JSON,
+source text, response text, or hidden reasoning. `modelVersion` and response ID
+are recorded when Gemini returns them; missing historical fields are reported
+as unavailable rather than backfilled.
 
 ## Execution and resumability
 
@@ -138,16 +140,17 @@ python scripts/run_phase5a_pilot.py --run --preflight-artifact reports/phase5a-p
 python scripts/run_phase5a_pilot.py --consistency
 ```
 
-Each synthetic preflight call counts toward a fresh 300-request repair ceiling.
-The repair ledger is separate from the historical provider attempts. The
-current single-provider preflight requires two synthetic calls. The nominal
-base pilot uses 120 calls, for 122 calls including preflight. The optional
-consistency subset uses 12 IDs, two additional evaluations per ID, and at most
-24 calls for one provider, for 146 nominal calls including preflight. Runtime
-retries and bounded parse regenerations still consume the same hard 300-request
-budget. The historical ledger records the earlier Gemini/Groq/OpenRouter and
-OKMD qualification attempts; the current pilot does not repeat those deferred
-provider checks.
+The original preflight and repair history is retained, but a resumed pilot uses
+a separate fresh 180-request ceiling. The resume procedure performs at most
+one synthetic Gemini health check, then evaluates only pending IDs from the
+immutable manifest. It paces requests at least 10 seconds apart, honors a
+provider `Retry-After` delay when present, stops immediately on an explicit
+requests-per-day (`RPD`) signal, and trips after three consecutive 429s. The
+nominal base pilot uses 120 calls. The optional consistency subset uses 12 IDs,
+two additional evaluations per ID, and at most 24 calls for one provider.
+Retries consume the same fresh budget. The historical ledger records the
+earlier Gemini/Groq/OpenRouter and OKMD qualification attempts; the current
+pilot does not repeat those deferred provider checks.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
 
@@ -156,6 +159,17 @@ provider/example pairs are skipped on resume. Missing or failed provider
 outputs remain missing/failed and are never converted into negative labels.
 The consistency runs measure stability only; run #1 remains the primary pilot
 prediction.
+
+The 2026-08-26 Gemini resume was stopped safely at
+`DAILY_QUOTA_EXHAUSTED`: the health check passed, 13 additional pilot IDs
+completed, and 21 fresh requests were consumed in total (one health check plus
+pilot attempts/retries). The report contains the exact start partition, request
+ledger, and rate-limit diagnostics; the ignored state file is the source of
+truth for the remaining IDs. The first five historical
+successful traces have `modelVersion` unavailable, while resumed successful
+traces consistently report `gemini-2.5-flash-lite`; continuity is therefore
+`UNVERIFIED`, not asserted as a pass. No historical success was overwritten, no
+other provider was tried, and Phase 5B remains unauthorized.
 
 ## Comparisons and decision boundary
 
