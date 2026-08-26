@@ -140,17 +140,18 @@ python scripts/run_phase5a_pilot.py --run --preflight-artifact reports/phase5a-p
 python scripts/run_phase5a_pilot.py --consistency
 ```
 
-The original preflight and repair history is retained, but a resumed pilot uses
-a separate fresh 150-request ceiling. The resume procedure performs at most
-one synthetic Gemini health check, then evaluates only pending IDs from the
-immutable manifest. It paces requests at least 10 seconds apart, honors a
-provider `Retry-After` delay when present, stops immediately on an explicit
-requests-per-day (`RPD`) signal, and trips after three consecutive 429s. The
-nominal base pilot uses 120 calls. The optional consistency subset uses 12 IDs,
-two additional evaluations per ID, and at most 24 calls for one provider.
-Retries consume the same fresh budget. The historical ledger records the
-earlier Gemini/Groq/OpenRouter and OKMD qualification attempts; the current
-pilot does not repeat those deferred provider checks.
+The original preflight and repair history is retained, but each resumed window
+has its own new-request ceiling of `min(remaining_pending + 10, 120)`. The
+resume procedure sends no synthetic health check: the first pending ID from the
+immutable manifest is the operational probe. It paces requests at least 10
+seconds apart, honors a provider `Retry-After` delay when present, stops
+immediately on an explicit requests-per-day (`RPD`) signal, and trips after
+three consecutive 429s. The nominal base pilot uses 120 calls. The optional
+consistency subset uses 12 IDs, two additional evaluations per ID, and at most
+24 calls for one provider. Retries consume the same session budget. The
+historical ledger records the earlier Gemini/Groq/OpenRouter and OKMD
+qualification attempts; the current pilot does not repeat those deferred
+provider checks.
 Only 429, 5xx, and timeout failures receive at most two bounded retries; 401,
 402, schema-invalid, and permanent model errors are not retried.
 
@@ -177,6 +178,15 @@ stopped before adding any primary prediction: 2 requests were used in that
 session, the cumulative lifetime ledger is 329, and all 102 IDs remain
 pending. This remains an incomplete operational result; no completion-result
 commit was created and no consistency calls were made.
+
+The third resume on 2026-08-27 used the revised pending-ID probe policy. Its
+first and only request was the first pending ID (`10713`), which returned an
+explicit `RPD` signal and stopped immediately. No synthetic request was sent,
+no new valid prediction was added, the session used 1 request against its
+112-request ceiling, and the cumulative lifetime ledger is 330 with 18 valid
+predictions and 102 IDs still pending. The report marks this as
+`PARTIAL_NON_DECISION_VALID`; no completion-result commit, consistency call, or
+Phase 5B decision was made.
 
 ## Comparisons and decision boundary
 
