@@ -141,7 +141,7 @@ python scripts/run_phase5a_pilot.py --consistency
 ```
 
 The original preflight and repair history is retained, but a resumed pilot uses
-a separate fresh 180-request ceiling. The resume procedure performs at most
+a separate fresh 150-request ceiling. The resume procedure performs at most
 one synthetic Gemini health check, then evaluates only pending IDs from the
 immutable manifest. It paces requests at least 10 seconds apart, honors a
 provider `Retry-After` delay when present, stops immediately on an explicit

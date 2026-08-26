@@ -29,8 +29,8 @@ def test_request_estimate_respects_the_300_request_ceiling() -> None:
     assert estimate_request_count(121, include_consistency=True) == 147
 
 
-def test_resume_task_uses_a_fresh_180_request_budget() -> None:
-    assert FRESH_REQUEST_BUDGET == 180
+def test_resume_task_uses_a_fresh_150_request_budget() -> None:
+    assert FRESH_REQUEST_BUDGET == 150
 
 
 def test_preflight_request_count_preserves_real_requests_across_restarts() -> None:
