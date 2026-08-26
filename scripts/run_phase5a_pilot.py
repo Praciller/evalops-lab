@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -53,7 +54,6 @@ from evalops.pilot.execution import (
 from evalops.pilot.models import PilotManifest, PilotRunRecord
 from evalops.pilot.provenance import ModelVersionChangedError, ModelVersionContinuity
 from evalops.pilot.rate_limit import (
-    DailyQuotaExhaustedError,
     RateAwareRequestScheduler,
     RateLimitStopError,
 )
@@ -67,7 +67,8 @@ from evalops.providers.okmd import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OFFICIAL_PROVIDER_NAMES = ("gemini",)
-FRESH_REQUEST_BUDGET = 150
+MAX_DAILY_RESUME_REQUESTS = 120
+RETRY_HEADROOM_REQUESTS = 10
 DEFAULT_RATE_INTERVAL_SECONDS = 10.0
 OKMD_MAX_CANDIDATES = 3
 OKMD_OUTPUT_MODE = JudgeOutputMode.JSON_TEXT_LOCAL_VALIDATION
@@ -98,6 +99,14 @@ def preflight_request_count(previous_external_requests: int) -> int:
     if previous_external_requests < 0:
         raise ValueError("previous external request count cannot be negative")
     return previous_external_requests + 2
+
+
+def _resume_request_budget(remaining_pending: int) -> int:
+    """Bound one resume window by pending work plus retry headroom."""
+
+    if remaining_pending < 0:
+        raise ValueError("remaining pending count cannot be negative")
+    return min(remaining_pending + RETRY_HEADROOM_REQUESTS, MAX_DAILY_RESUME_REQUESTS)
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -743,10 +752,11 @@ def _resume_health_check_required(
     pending_ids: Sequence[str],
     prior_health_check: Mapping[str, Any] | None = None,
 ) -> bool:
-    """Require a fresh health check for every new session with pending IDs."""
+    """Disable synthetic health checks; the first pending ID is the probe."""
 
+    del pending_ids
     del prior_health_check
-    return bool(pending_ids)
+    return False
 
 
 def _resume_model_version_sets(
@@ -782,36 +792,6 @@ def _validate_frozen_resume_config(preflight: Mapping[str, Any]) -> None:
         raise RuntimeError("FROZEN_SCHEMA_VERSION_MISMATCH")
     if preflight.get("output_modes", {}).get("gemini") != JudgeOutputMode.JSON_SCHEMA_STRICT:
         raise RuntimeError("FROZEN_OUTPUT_MODE_MISMATCH")
-
-
-def _run_resume_health_check(
-    evaluator: LLMJudgeEvaluator,
-    budget: RequestBudget,
-    scheduler: RateAwareRequestScheduler,
-    continuity: ModelVersionContinuity,
-) -> dict[str, Any]:
-    """Use at most one synthetic request to verify resumed provider health."""
-
-    case = SYNTHETIC_PREFLIGHT_CASES[0]
-    budget.reserve()
-    scheduler.before_request()
-    trace = evaluator.evaluate_with_trace(case["context"], case["response"], case["example_id"])
-    scheduler.observe(
-        trace.error_class,
-        retry_after_seconds=trace.retry_after_seconds,
-        rate_limit_dimension=trace.rate_limit_dimension,
-    )
-    if trace.prediction is not None:
-        continuity.observe(trace.model_version)
-    status = "PASS" if trace.api_success and trace.parse_success else "FAILED"
-    if trace.error_class == "API_RATE_LIMIT" and trace.rate_limit_dimension in {"RPM", "TPM"}:
-        scheduler.wait_before_retry(trace.retry_after_seconds)
-        status = "RATE_LIMIT_COOLDOWN"
-    return {
-        "attempted": True,
-        "status": status,
-        **_trace_progress_summary(trace),
-    }
 
 
 def _scheduler_report(
@@ -886,20 +866,30 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         successful_primary_ids=successful_ids,
         attempted_ids=attempted_ids,
     )
-    prior_lifetime_requests = existing_report.get(
+    resume_base_lifetime_requests = existing_report.get(
         "resume_prior_external_requests",
         existing_report.get("external_requests", preflight["external_requests"]),
     )
-    new_requests_used = existing_report.get("resume_new_external_requests", 0)
+    lifetime_requests_at_start = existing_report.get(
+        "external_requests", resume_base_lifetime_requests
+    )
+    cumulative_resume_requests = existing_report.get(
+        "resume_new_external_requests",
+        max(lifetime_requests_at_start - resume_base_lifetime_requests, 0),
+    )
     if (
-        not isinstance(prior_lifetime_requests, int)
-        or prior_lifetime_requests < 0
-        or not isinstance(new_requests_used, int)
-        or not 0 <= new_requests_used <= FRESH_REQUEST_BUDGET
+        not isinstance(resume_base_lifetime_requests, int)
+        or resume_base_lifetime_requests < 0
+        or not isinstance(lifetime_requests_at_start, int)
+        or lifetime_requests_at_start < resume_base_lifetime_requests
+        or not isinstance(cumulative_resume_requests, int)
+        or cumulative_resume_requests < 0
     ):
         raise RuntimeError("INVALID_RESUME_REQUEST_LEDGER")
-    budget = RequestBudget(FRESH_REQUEST_BUDGET)
-    budget.requests_used = new_requests_used
+    session_started_at = datetime.now(UTC)
+    session_id = f"phase5a-resume-{session_started_at:%Y%m%d-%H%M%S}"
+    session_request_budget = _resume_request_budget(len(resume_partition["pending_ids"]))
+    budget = RequestBudget(session_request_budget)
     scheduler = RateAwareRequestScheduler(min_interval_seconds=DEFAULT_RATE_INTERVAL_SECONDS)
     successful_model_versions = {
         record.trace.model_version
@@ -912,35 +902,10 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
     continuity = ModelVersionContinuity(historical_versions)
     continuity.resumed_versions.update(existing_resumed_versions)
     stop_reason: str | None = None
-    health_result = existing_report.get("resume_health_check")
-    if not isinstance(health_result, dict):
-        health_result = None
-    if _resume_health_check_required(resume_partition["pending_ids"], health_result):
-        try:
-            health_result = _run_resume_health_check(
-                evaluators["gemini"], budget, scheduler, continuity
-            )
-            if health_result["status"] not in {"PASS", "RATE_LIMIT_COOLDOWN"}:
-                stop_reason = "RESUME_HEALTH_CHECK_FAILED"
-        except DailyQuotaExhaustedError:
-            stop_reason = "DAILY_QUOTA_NOT_RESET"
-            health_result = {
-                "attempted": True,
-                "status": "STOPPED",
-                "error_class": "DAILY_QUOTA_NOT_RESET",
-            }
-        except (ModelVersionChangedError, RateLimitStopError, PilotRequestLimitError) as error:
-            stop_reason = str(error)
-            health_result = {
-                "attempted": True,
-                "status": "STOPPED",
-                "error_class": str(error),
-            }
-    else:
-        health_result = {
-            "attempted": False,
-            "status": "NOT_REQUIRED_PRIMARY_COMPLETE",
-        }
+    health_result = {
+        "attempted": False,
+        "status": "NOT_RUN_FIRST_PENDING_PROBE",
+    }
     if stop_reason is None:
         try:
             run_provider_pilot(
@@ -970,6 +935,36 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
     provider_predictions = {
         provider: _record_map(provider_records[provider]) for provider in selected_providers
     }
+    successful_ids_at_end = [
+        example_id
+        for example_id in manifest.example_ids
+        if example_id in provider_predictions["gemini"]
+    ]
+    successful_ids_at_start = set(resume_partition["successful_primary_ids"])
+    new_valid_ids = [
+        example_id
+        for example_id in successful_ids_at_end
+        if example_id not in successful_ids_at_start
+    ]
+    pending_ids_at_end = [
+        example_id for example_id in manifest.example_ids if example_id not in successful_ids_at_end
+    ]
+    first_pending_id = (
+        resume_partition["pending_ids"][0] if resume_partition["pending_ids"] else None
+    )
+    first_pending_record = (
+        state.get("gemini", first_pending_id) if first_pending_id is not None else None
+    )
+    first_pending_probe: dict[str, Any] = {
+        "example_id": first_pending_id,
+        "status": "NOT_REQUIRED_PRIMARY_COMPLETE" if first_pending_id is None else "NOT_OBSERVED",
+    }
+    if first_pending_record is not None:
+        first_pending_probe = {
+            "example_id": first_pending_record.example_id,
+            "status": first_pending_record.status,
+            **_trace_progress_summary(first_pending_record.trace),
+        }
     id_match = {
         name: set(values) == expected_ids
         for name, values in {**baseline_predictions, **provider_predictions}.items()
@@ -996,6 +991,7 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         else {"status": "SKIPPED_ID_MISMATCH"}
     )
     primary_complete = all(id_match.values())
+    session_ended_at = datetime.now(UTC)
     legacy_repair_requests = existing_report.get(
         "repair_external_requests", preflight["repair_external_requests"]
     )
@@ -1043,15 +1039,18 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         else "NOT_AUTHORIZED_PRIMARY_INCOMPLETE",
         "prior_external_requests": preflight["prior_external_requests"],
         "repair_external_requests": legacy_repair_requests + budget.requests_used,
-        "resume_prior_external_requests": prior_lifetime_requests,
-        "resume_new_external_requests": budget.requests_used,
-        "fresh_request_budget": FRESH_REQUEST_BUDGET,
-        "external_requests": prior_lifetime_requests + budget.requests_used,
+        "resume_prior_external_requests": resume_base_lifetime_requests,
+        "resume_new_external_requests": cumulative_resume_requests + budget.requests_used,
+        "session_new_external_requests": budget.requests_used,
+        "fresh_request_budget": session_request_budget,
+        "external_requests": lifetime_requests_at_start + budget.requests_used,
         "request_ledger": {
-            "prior_lifetime_requests": prior_lifetime_requests,
+            "prior_lifetime_requests": lifetime_requests_at_start,
+            "resume_base_lifetime_requests": resume_base_lifetime_requests,
+            "cumulative_resume_requests": cumulative_resume_requests + budget.requests_used,
             "new_requests_used": budget.requests_used,
-            "fresh_budget": FRESH_REQUEST_BUDGET,
-            "remaining_new_requests": FRESH_REQUEST_BUDGET - budget.requests_used,
+            "fresh_budget": session_request_budget,
+            "remaining_new_requests": session_request_budget - budget.requests_used,
         },
         "quota_status": (
             "DAILY_QUOTA_NOT_RESET"
@@ -1062,8 +1061,9 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
             if stop_reason == "RATE_LIMIT_STILL_BLOCKING"
             else "FRESH_REQUEST_BUDGET_EXHAUSTED"
             if stop_reason and stop_reason.startswith("Phase 5A request ceiling")
-            else "AVAILABLE_WITHIN_FRESH_150_REQUEST_BUDGET"
+            else "AVAILABLE_WITHIN_SESSION_BUDGET"
         ),
+        "metric_validity": "DECISION_VALID" if primary_complete else "PARTIAL_NON_DECISION_VALID",
         "cost_status": "PROVIDER_REPORTED_ONLY",
         "consistency_run": "NOT_RUN" if primary_complete else "NOT_RUN_PRIMARY_INCOMPLETE",
         "consistency": {
@@ -1085,6 +1085,24 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
         "pending_ids_at_start": resume_partition["pending_ids"],
         "attempted_records_at_end": len(provider_records["gemini"]),
         "completed_valid": len(provider_predictions["gemini"]),
+        "successful_ids_at_end": successful_ids_at_end,
+        "pending_ids_at_end": pending_ids_at_end,
+        "new_valid_results": new_valid_ids,
+        "first_pending_probe": first_pending_probe,
+        "resume_session": {
+            "session_id": session_id,
+            "started_at": session_started_at.isoformat(),
+            "ended_at": session_ended_at.isoformat(),
+            "successful_ids_at_start": resume_partition["successful_primary_ids"],
+            "pending_ids_at_start": resume_partition["pending_ids"],
+            "new_valid_results": new_valid_ids,
+            "successful_ids_at_end": successful_ids_at_end,
+            "pending_ids_at_end": pending_ids_at_end,
+            "new_external_requests": budget.requests_used,
+            "request_budget": session_request_budget,
+            "rpd_stop": stop_reason == "DAILY_QUOTA_EXHAUSTED",
+            "first_pending_probe": first_pending_probe,
+        },
         "resume_health_check": health_result,
         "resume_start_error_counts": {
             provider: _error_counts(records_for_provider)
@@ -1154,15 +1172,12 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
     manifest = PilotManifest.model_validate_json(args.manifest.read_text(encoding="utf-8"))
     _validate_pilot_manifest(manifest)
     consistency = build_consistency_manifest(manifest)
-    current_requests = int(
-        report.get("resume_new_external_requests", report.get("external_requests", 0))
-    )
     consistency_requests = 24 * len(selected_providers)
-    if current_requests + consistency_requests > FRESH_REQUEST_BUDGET:
+    if consistency_requests > MAX_DAILY_RESUME_REQUESTS:
         report["consistency_run"] = "QUOTA_BLOCKED"
         report["consistency"] = {
             "status": "QUOTA_BLOCKED",
-            "reason": "The fresh Phase 5A request budget cannot fit 24 repeat calls.",
+            "reason": "The daily Phase 5A request budget cannot fit 24 repeat calls.",
         }
         _write_json(args.report, report)
         return report
@@ -1182,8 +1197,7 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
         report.get("output_modes", {}),
         report.get("okmd_selection"),
     )
-    budget = RequestBudget(FRESH_REQUEST_BUDGET)
-    budget.requests_used = current_requests
+    budget = RequestBudget(consistency_requests)
     scheduler = RateAwareRequestScheduler(min_interval_seconds=DEFAULT_RATE_INTERVAL_SECONDS)
     repeated: dict[str, list[PilotRunRecord]] = {provider: [] for provider in selected_providers}
     stop_reason: str | None = None
@@ -1216,15 +1230,13 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
             "status": report["consistency_run"],
             "reason": stop_reason,
         }
-        report["resume_new_external_requests"] = budget.requests_used
-        report["external_requests"] = (
-            report.get("resume_prior_external_requests", 0) + budget.requests_used
-        )
+        report["consistency_new_external_requests"] = budget.requests_used
+        report["external_requests"] = report.get("external_requests", 0) + budget.requests_used
         report["request_ledger"] = {
-            "prior_lifetime_requests": report.get("resume_prior_external_requests", 0),
+            "prior_lifetime_requests": report.get("external_requests", 0) - budget.requests_used,
             "new_requests_used": budget.requests_used,
-            "fresh_budget": FRESH_REQUEST_BUDGET,
-            "remaining_new_requests": FRESH_REQUEST_BUDGET - budget.requests_used,
+            "fresh_budget": consistency_requests,
+            "remaining_new_requests": consistency_requests - budget.requests_used,
         }
         report["consistency_rate_limit_diagnostics"] = _scheduler_report(
             scheduler, stop_reason=stop_reason
@@ -1248,18 +1260,16 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, Any]:
     }
     report["consistency"] = consistency_reports
     report["consistency_run"] = "COMPLETE"
-    report["resume_new_external_requests"] = budget.requests_used
-    report["external_requests"] = (
-        report.get("resume_prior_external_requests", 0) + budget.requests_used
-    )
+    report["consistency_new_external_requests"] = budget.requests_used
+    report["external_requests"] = report.get("external_requests", 0) + budget.requests_used
     report["repair_external_requests"] = report.get("repair_external_requests", 0) + (
-        budget.requests_used - current_requests
+        budget.requests_used
     )
     report["request_ledger"] = {
-        "prior_lifetime_requests": report.get("resume_prior_external_requests", 0),
+        "prior_lifetime_requests": report.get("external_requests", 0) - budget.requests_used,
         "new_requests_used": budget.requests_used,
-        "fresh_budget": FRESH_REQUEST_BUDGET,
-        "remaining_new_requests": FRESH_REQUEST_BUDGET - budget.requests_used,
+        "fresh_budget": consistency_requests,
+        "remaining_new_requests": consistency_requests - budget.requests_used,
     }
     report["consistency_rate_limit_diagnostics"] = _scheduler_report(scheduler, stop_reason=None)
     _write_json(args.report, report)

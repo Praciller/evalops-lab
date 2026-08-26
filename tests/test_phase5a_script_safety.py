@@ -8,12 +8,14 @@ import pytest
 from evalops.models.hallucination import HallucinationLabel
 from evalops.pilot.models import PilotExampleMetadata, PilotManifest
 from scripts.run_phase5a_pilot import (
-    FRESH_REQUEST_BUDGET,
+    MAX_DAILY_RESUME_REQUESTS,
     OFFICIAL_PROVIDER_NAMES,
+    RETRY_HEADROOM_REQUESTS,
     _assert_no_prompt_leakage,
     _partition_resume_ids,
     _resume_health_check_required,
     _resume_model_version_sets,
+    _resume_request_budget,
     _validate_pilot_manifest,
     _validate_preflight,
     estimate_request_count,
@@ -31,8 +33,11 @@ def test_request_estimate_respects_the_300_request_ceiling() -> None:
     assert estimate_request_count(121, include_consistency=True) == 147
 
 
-def test_resume_task_uses_a_fresh_150_request_budget() -> None:
-    assert FRESH_REQUEST_BUDGET == 150
+def test_resume_window_caps_requests_at_pending_plus_ten_and_120() -> None:
+    assert RETRY_HEADROOM_REQUESTS == 10
+    assert MAX_DAILY_RESUME_REQUESTS == 120
+    assert _resume_request_budget(102) == 112
+    assert _resume_request_budget(200) == 120
 
 
 def test_preflight_request_count_preserves_real_requests_across_restarts() -> None:
@@ -118,8 +123,8 @@ def test_resume_partition_keeps_failed_and_never_attempted_ids_pending() -> None
     }
 
 
-def test_prior_session_health_check_does_not_waive_new_resume_health_check() -> None:
-    assert _resume_health_check_required(["pending-id"], {"status": "PASS"}) is True
+def test_resume_uses_first_pending_id_instead_of_synthetic_health_check() -> None:
+    assert _resume_health_check_required(["pending-id"], {"status": "PASS"}) is False
     assert _resume_health_check_required([], {"status": "PASS"}) is False
 
 
