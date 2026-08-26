@@ -749,6 +749,28 @@ def _resume_health_check_required(
     return bool(pending_ids)
 
 
+def _resume_model_version_sets(
+    existing_report: Mapping[str, Any],
+    successful_model_versions: set[str],
+) -> tuple[set[str], set[str]]:
+    """Preserve the report's historical/resumed model-version boundary."""
+
+    provenance = existing_report.get("model_version_provenance")
+    if isinstance(provenance, dict) and "historical_model_versions" in provenance:
+        historical = {
+            value
+            for value in provenance.get("historical_model_versions", [])
+            if isinstance(value, str) and value
+        }
+        resumed = {
+            value
+            for value in provenance.get("resumed_model_versions", [])
+            if isinstance(value, str) and value
+        }
+        return historical, resumed
+    return set(successful_model_versions), set()
+
+
 def _validate_frozen_resume_config(preflight: Mapping[str, Any]) -> None:
     if preflight.get("selected_providers") != ["gemini"]:
         raise RuntimeError("FROZEN_PROVIDER_SCOPE_MISMATCH")
@@ -879,17 +901,16 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
     budget = RequestBudget(FRESH_REQUEST_BUDGET)
     budget.requests_used = new_requests_used
     scheduler = RateAwareRequestScheduler(min_interval_seconds=DEFAULT_RATE_INTERVAL_SECONDS)
-    historical_versions = {
+    successful_model_versions = {
         record.trace.model_version
         for record in existing_successes
         if record.trace.model_version is not None
     }
+    historical_versions, existing_resumed_versions = _resume_model_version_sets(
+        existing_report, successful_model_versions
+    )
     continuity = ModelVersionContinuity(historical_versions)
-    existing_resumed_versions = existing_report.get("resume_model_versions", [])
-    if isinstance(existing_resumed_versions, list):
-        continuity.resumed_versions.update(
-            value for value in existing_resumed_versions if isinstance(value, str) and value
-        )
+    continuity.resumed_versions.update(existing_resumed_versions)
     stop_reason: str | None = None
     health_result = existing_report.get("resume_health_check")
     if not isinstance(health_result, dict):

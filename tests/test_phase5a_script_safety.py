@@ -13,6 +13,7 @@ from scripts.run_phase5a_pilot import (
     _assert_no_prompt_leakage,
     _partition_resume_ids,
     _resume_health_check_required,
+    _resume_model_version_sets,
     _validate_pilot_manifest,
     _validate_preflight,
     estimate_request_count,
@@ -120,3 +121,18 @@ def test_resume_partition_keeps_failed_and_never_attempted_ids_pending() -> None
 def test_prior_session_health_check_does_not_waive_new_resume_health_check() -> None:
     assert _resume_health_check_required(["pending-id"], {"status": "PASS"}) is True
     assert _resume_health_check_required([], {"status": "PASS"}) is False
+
+
+def test_resume_provenance_does_not_reclassify_historical_successes() -> None:
+    historical, resumed = _resume_model_version_sets(
+        {
+            "model_version_provenance": {
+                "historical_model_versions": [],
+                "resumed_model_versions": ["v1"],
+            }
+        },
+        {"v1"},
+    )
+
+    assert historical == set()
+    assert resumed == {"v1"}
