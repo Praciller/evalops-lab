@@ -53,6 +53,7 @@ from evalops.pilot.execution import (
 from evalops.pilot.models import PilotManifest, PilotRunRecord
 from evalops.pilot.provenance import ModelVersionChangedError, ModelVersionContinuity
 from evalops.pilot.rate_limit import (
+    DailyQuotaExhaustedError,
     RateAwareRequestScheduler,
     RateLimitStopError,
 )
@@ -738,6 +739,16 @@ def _load_existing_report(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _resume_health_check_required(
+    pending_ids: Sequence[str],
+    prior_health_check: Mapping[str, Any] | None = None,
+) -> bool:
+    """Require a fresh health check for every new session with pending IDs."""
+
+    del prior_health_check
+    return bool(pending_ids)
+
+
 def _validate_frozen_resume_config(preflight: Mapping[str, Any]) -> None:
     if preflight.get("selected_providers") != ["gemini"]:
         raise RuntimeError("FROZEN_PROVIDER_SCOPE_MISMATCH")
@@ -770,9 +781,13 @@ def _run_resume_health_check(
     )
     if trace.prediction is not None:
         continuity.observe(trace.model_version)
+    status = "PASS" if trace.api_success and trace.parse_success else "FAILED"
+    if trace.error_class == "API_RATE_LIMIT" and trace.rate_limit_dimension in {"RPM", "TPM"}:
+        scheduler.wait_before_retry(trace.retry_after_seconds)
+        status = "RATE_LIMIT_COOLDOWN"
     return {
         "attempted": True,
-        "status": "PASS" if trace.api_success and trace.parse_success else "FAILED",
+        "status": status,
         **_trace_progress_summary(trace),
     }
 
@@ -791,7 +806,12 @@ def _scheduler_report(
         "consecutive_rate_limits_at_stop": scheduler.consecutive_rate_limits,
         "circuit_breaker": (
             "TRIPPED"
-            if stop_reason in {"RATE_LIMIT_STILL_BLOCKING", "DAILY_QUOTA_EXHAUSTED"}
+            if stop_reason
+            in {
+                "RATE_LIMIT_STILL_BLOCKING",
+                "DAILY_QUOTA_EXHAUSTED",
+                "DAILY_QUOTA_NOT_RESET",
+            }
             else "NOT_TRIPPED"
         ),
     }
@@ -874,16 +894,20 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
     health_result = existing_report.get("resume_health_check")
     if not isinstance(health_result, dict):
         health_result = None
-    if health_result is not None:
-        if health_result.get("status") != "PASS":
-            stop_reason = "RESUME_HEALTH_CHECK_FAILED"
-    elif resume_partition["pending_ids"]:
+    if _resume_health_check_required(resume_partition["pending_ids"], health_result):
         try:
             health_result = _run_resume_health_check(
                 evaluators["gemini"], budget, scheduler, continuity
             )
-            if health_result["status"] != "PASS":
+            if health_result["status"] not in {"PASS", "RATE_LIMIT_COOLDOWN"}:
                 stop_reason = "RESUME_HEALTH_CHECK_FAILED"
+        except DailyQuotaExhaustedError:
+            stop_reason = "DAILY_QUOTA_NOT_RESET"
+            health_result = {
+                "attempted": True,
+                "status": "STOPPED",
+                "error_class": "DAILY_QUOTA_NOT_RESET",
+            }
         except (ModelVersionChangedError, RateLimitStopError, PilotRequestLimitError) as error:
             stop_reason = str(error)
             health_result = {
@@ -1009,13 +1033,15 @@ def _run_base(args: argparse.Namespace) -> dict[str, Any]:
             "remaining_new_requests": FRESH_REQUEST_BUDGET - budget.requests_used,
         },
         "quota_status": (
-            "DAILY_QUOTA_EXHAUSTED"
+            "DAILY_QUOTA_NOT_RESET"
+            if stop_reason == "DAILY_QUOTA_NOT_RESET"
+            else "DAILY_QUOTA_EXHAUSTED"
             if stop_reason == "DAILY_QUOTA_EXHAUSTED"
             else "RATE_LIMIT_STILL_BLOCKING"
             if stop_reason == "RATE_LIMIT_STILL_BLOCKING"
             else "FRESH_REQUEST_BUDGET_EXHAUSTED"
             if stop_reason and stop_reason.startswith("Phase 5A request ceiling")
-            else "AVAILABLE_WITHIN_FRESH_180_REQUEST_BUDGET"
+            else "AVAILABLE_WITHIN_FRESH_150_REQUEST_BUDGET"
         ),
         "cost_status": "PROVIDER_REPORTED_ONLY",
         "consistency_run": "NOT_RUN" if primary_complete else "NOT_RUN_PRIMARY_INCOMPLETE",

@@ -12,6 +12,7 @@ from scripts.run_phase5a_pilot import (
     OFFICIAL_PROVIDER_NAMES,
     _assert_no_prompt_leakage,
     _partition_resume_ids,
+    _resume_health_check_required,
     _validate_pilot_manifest,
     _validate_preflight,
     estimate_request_count,
@@ -114,3 +115,8 @@ def test_resume_partition_keeps_failed_and_never_attempted_ids_pending() -> None
         "never_attempted_ids": ["c", "d"],
         "pending_ids": ["b", "c", "d"],
     }
+
+
+def test_prior_session_health_check_does_not_waive_new_resume_health_check() -> None:
+    assert _resume_health_check_required(["pending-id"], {"status": "PASS"}) is True
+    assert _resume_health_check_required([], {"status": "PASS"}) is False
