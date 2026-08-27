@@ -139,6 +139,12 @@ the tokenizer revision, configuration/custom-code hashes, and safe weight-file
 identity before importing remote code. Default CI installs only `.[dev]` and
 does not download datasets or execute HHEM custom code.
 
+The repository includes source, tests, metadata, and small synthetic fixtures;
+it does not redistribute the external MIRACL/RAGTruth corpora or HHEM weights.
+Upstream terms recorded in the manifests must be re-checked before any
+redistribution, and this repository does not assert a project license for
+those upstream assets.
+
 ## Local setup
 
 Python 3.11+ is supported; CI runs Python 3.12.
@@ -147,6 +153,21 @@ Python 3.11+ is supported; CI runs Python 3.12.
 python -m venv .venv
 python -m pip install -e ".[dev]"
 ```
+
+## Fast reviewer path
+
+From the repository root, run the deterministic offline path:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest -q
+python -m evalops dataset validate datasets/fixtures/thai-rag-sample.jsonl --document-catalog datasets/fixtures/document-catalog.txt
+python -m evalops retrieval evaluate --ground-truth datasets/fixtures/retrieval-ground-truth.jsonl --predictions datasets/fixtures/retrieval-predictions.jsonl --k 5
+python -m evalops benchmark miracl --language th --split dev --retriever bm25 --k 5 --mini
+```
+
+The MIRACL command uses the clearly labeled synthetic `miracl-th-mini`
+fixture; its perfect fixture score is not an official MIRACL result.
 
 ## CLI examples
 
