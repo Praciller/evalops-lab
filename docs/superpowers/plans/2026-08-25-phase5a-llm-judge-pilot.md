@@ -284,4 +284,3 @@ Compare both judges against human labels, HHEM, and heuristic on the exact pilot
 - [ ] **Step 5: Select a Phase 5B recommendation without starting Phase 5B**
 
 Rank Gemini/Groq using F1, balanced accuracy, recall, FPR, parse/schema reliability, consistency, latency, token usage, quota practicality, and provenance. Report `COMPLETE` only when all required gates pass; otherwise use `COMPLETE_WITH_LIMITATIONS` with exact blockers.
-
