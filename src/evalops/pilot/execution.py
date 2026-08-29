@@ -20,14 +20,14 @@ class PilotRequestLimitError(RuntimeError):
 class RequestBudget:
     """Process-local hard request counter for all preflight/pilot/repeat calls."""
 
-    def __init__(self, max_requests: int = 300) -> None:
-        if max_requests < 1:
+    def __init__(self, max_requests: int | None = 300) -> None:
+        if max_requests is not None and max_requests < 1:
             raise ValueError("max_requests must be positive")
         self.max_requests = max_requests
         self.requests_used = 0
 
     def reserve(self) -> None:
-        if self.requests_used >= self.max_requests:
+        if self.max_requests is not None and self.requests_used >= self.max_requests:
             raise PilotRequestLimitError(
                 f"Phase 5A request ceiling {self.max_requests} would be exceeded"
             )
@@ -59,9 +59,13 @@ class PilotStateStore:
         return PilotRunRecord.model_validate(payload) if payload else None
 
     def upsert(self, record: PilotRunRecord) -> None:
-        self._records[self._key(record.provider, record.example_id)] = serialize_state_record(
-            record
-        )
+        key = self._key(record.provider, record.example_id)
+        existing = self._records.get(key)
+        if isinstance(existing, dict) and existing.get("status") == "SUCCESS":
+            if record.status == "SUCCESS" and existing != serialize_state_record(record):
+                raise ValueError("successful provider/example result is immutable")
+            return
+        self._records[key] = serialize_state_record(record)
         self._write_atomic()
 
     def _write_atomic(self) -> None:
@@ -76,7 +80,14 @@ class PilotStateStore:
 
 
 ProviderEvaluator = Callable[[str, str, str], JudgeEvaluationTrace]
-RETRYABLE_ERRORS = {"API_RATE_LIMIT", "API_SERVER_ERROR", "API_TIMEOUT"}
+RETRYABLE_ERRORS = {
+    "API_RATE_LIMIT",
+    "API_SERVER_ERROR",
+    "API_TIMEOUT",
+    "LOCAL_CONNECTION_ERROR",
+    "LOCAL_SERVER_ERROR",
+    "LOCAL_TIMEOUT",
+}
 
 
 def assert_matching_ids(expected_ids: set[str], *observed_id_sets: set[str]) -> None:

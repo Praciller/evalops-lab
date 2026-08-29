@@ -11,6 +11,7 @@ from evalops.evaluators.judge.providers import (
     GeminiProviderAdapter,
     GroqProviderAdapter,
     OKMDProviderAdapter,
+    OllamaProviderAdapter,
     SamplingConfig,
 )
 
@@ -18,6 +19,7 @@ __all__ = [
     "GeminiProviderAdapter",
     "GroqProviderAdapter",
     "OKMDProviderAdapter",
+    "OllamaProviderAdapter",
     "JudgeDecision",
     "JudgeEvaluationError",
     "JudgeEvaluationTrace",

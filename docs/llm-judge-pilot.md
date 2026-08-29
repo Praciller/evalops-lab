@@ -203,3 +203,53 @@ Phase 5A ends with a documented `PHASE5B_RECOMMENDED_JUDGE` and owner review.
 The full RAGTruth run is a separate Phase 5B decision. The single-provider
 pilot recommendation is therefore a validation input, not authorization for a
 full Gemini run.
+
+## Phase 5A-L: isolated local open-weight judge
+
+The Gemini experiment above is preserved at 23/120 valid primary predictions;
+its 97 pending IDs and state are not resumed or filled by this experiment.
+Phase 5A-L is a separate local experiment named
+`ragtruth-local-llm-judge-pilot-v1`. It reuses the same immutable 120 IDs,
+seed `20260825`, six 20-example strata, strict-groundedness prompt hash
+`6ce1879a517fad6655a4a620d50c49ec24b9cee3c2a9d08c606d2f59c64bc9fc`, and
+schema `ragtruth-llm-judge-output-v1`.
+
+The preferred local model is Ollama `qwen3:8b`, frozen after the synthetic
+preflight. `qwen3:4b` is permitted only after an observed 8B resource/load/OOM
+failure; benchmark scores never select the fallback. The adapter calls only
+the loopback Ollama `/api/chat` endpoint, requests structured JSON with
+`think=false`, and locally validates the same Pydantic decision contract. It
+records safe model/version metadata, model digest, quantization, token
+counters, response ID when returned, timestamps, and latency, but never raw
+model bodies, source/response text, or reasoning. Hosted API inference cost is
+$0; local electricity cost is not estimated.
+
+The local preflight is five synthetic cases: two grounded, two hallucinated,
+and one prompt-injection case treated as untrusted data. It must produce 5/5
+API successes, 5/5 parse/schema successes, no resource failure, and reasonable
+latency before RAGTruth is used. Once it passes, no second model is benchmarked
+against RAGTruth. The local state and report are separate ignored artifacts:
+
+```text
+python scripts/run_phase5a_local_pilot.py --preflight
+python scripts/run_phase5a_local_pilot.py --run
+python scripts/run_phase5a_local_pilot.py --consistency
+```
+
+`reports/phase5a-local-pilot-state.json` is atomically updated after every
+attempt, and successful local provider/example records are immutable on
+resume. The local run has no artificial hosted daily/request ceiling; it is
+sequential and uses only bounded local transient retries. A changed local
+model digest stops the run. Until all 120 local predictions are valid, local
+metrics are labeled `PARTIAL_NON_DECISION_VALID`. At 120/120, the report
+calculates human-label metrics, task slices, paired comparisons against HHEM
+and the heuristic, false-positive/false-negative evidence, and a three-
+evaluator analysis without majority voting. Any Gemini comparison is an
+exploratory intersection over its 23 successful IDs only.
+
+The separate consistency run samples 12 existing IDs with seed `20260826`
+and performs two additional evaluations per ID (24 repeats). It measures
+stability only; it never votes into the primary prediction. A complete local
+pilot and consistency result still requires owner authorization before any
+full 2,675-example Phase 5B-L run. This repository does not start that run
+automatically.

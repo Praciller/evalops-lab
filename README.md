@@ -75,6 +75,9 @@ Dataset metadata and rules are in [`datasets/README.md`](datasets/README.md) and
 Verified results are consolidated in [`docs/benchmark-results.md`](docs/benchmark-results.md).
 The reproducible command flow is in [`docs/reproducibility.md`](docs/reproducibility.md),
 and HHEM provenance/security details are in [`docs/hhem-evaluator.md`](docs/hhem-evaluator.md).
+The isolated local Ollama/Qwen3 Phase 5A-L experiment is documented in
+[`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md); it does not mix with the
+partial Gemini pilot or authorize Phase 5B.
 
 ## RAGTruth hallucination benchmark
 

@@ -12,7 +12,7 @@ from evalops.pilot.execution import (
     RequestBudget,
     run_provider_pilot,
 )
-from evalops.pilot.models import PilotExampleMetadata, PilotManifest
+from evalops.pilot.models import PilotExampleMetadata, PilotManifest, PilotRunRecord
 from evalops.pilot.rate_limit import (
     DailyQuotaExhaustedError,
     RateAwareRequestScheduler,
@@ -80,6 +80,41 @@ def test_successful_provider_example_is_skipped_on_resume(tmp_path: Path) -> Non
     run_provider_pilot(_manifest(), examples, {"fake": evaluator}, state, RequestBudget(10))
 
     assert calls == 1
+
+
+def test_successful_state_record_is_immutable(tmp_path: Path) -> None:
+    state = PilotStateStore(tmp_path / "state.json")
+    first = _trace("a")
+    state.upsert(
+        PilotRunRecord(
+            provider="fake",
+            example_id="a",
+            attempt=1,
+            status="SUCCESS",
+            trace=first,
+        )
+    )
+    replacement = _trace("a")
+    replacement = replacement.model_copy(update={"requested_model": "different"})
+
+    with pytest.raises(ValueError, match="immutable"):
+        state.upsert(
+            PilotRunRecord(
+                provider="fake",
+                example_id="a",
+                attempt=2,
+                status="SUCCESS",
+                trace=replacement,
+            )
+        )
+
+
+def test_unlimited_request_budget_has_no_artificial_ceiling() -> None:
+    budget = RequestBudget(None)
+    for _ in range(301):
+        budget.reserve()
+
+    assert budget.requests_used == 301
 
 
 def test_transient_failures_retry_but_auth_and_quota_do_not(tmp_path: Path) -> None:

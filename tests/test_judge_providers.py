@@ -7,6 +7,7 @@ from evalops.evaluators.judge.providers import (
     GroqProviderAdapter,
     JudgeOutputMode,
     OKMDProviderAdapter,
+    OllamaProviderAdapter,
     OpenRouterProviderAdapter,
     ProviderHTTPResponse,
     SamplingConfig,
@@ -366,3 +367,98 @@ def test_okmd_output_failure_can_be_regenerated_once_by_execution_layer() -> Non
 
     assert call.api_success is True
     assert call.assistant_content == "not json"
+
+
+def test_ollama_structured_request_disables_thinking_and_maps_safe_usage() -> None:
+    transport = QueueTransport(
+        ProviderHTTPResponse(
+            status_code=200,
+            body={
+                "model": "qwen3:8b",
+                "created_at": "2026-08-29T00:00:00Z",
+                "message": {
+                    "role": "assistant",
+                    "content": '{"label":"GROUNDED"}',
+                    "thinking": "private reasoning",
+                },
+                "done": True,
+                "done_reason": "stop",
+                "prompt_eval_count": 40,
+                "eval_count": 12,
+                "total_duration": 1000000,
+                "load_duration": 1000000,
+                "eval_duration": 2000000000,
+            },
+        )
+    )
+    adapter = OllamaProviderAdapter(
+        model="qwen3:8b",
+        transport=transport,
+        model_digest="sha256:model",
+        quantization="Q4_K_M",
+        parameter_size="8.2B",
+        context_length=40960,
+    )
+
+    call = adapter.judge("prompt", schema=SCHEMA, config=SamplingConfig())
+    request = transport.calls[0]
+
+    assert request["url"] == "http://127.0.0.1:11434/api/chat"
+    assert request["payload"]["format"] == SCHEMA
+    assert request["payload"]["think"] is False
+    assert request["payload"]["options"] == {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "num_predict": 256,
+    }
+    assert call.provider == "local-ollama"
+    assert call.api_success is True
+    assert call.returned_model == "qwen3:8b"
+    assert call.usage == {
+        "prompt_tokens": 40,
+        "completion_tokens": 12,
+        "total_duration_ns": 1000000,
+        "load_duration_ns": 1000000,
+        "eval_duration_ns": 2000000000,
+        "total_tokens": 52,
+        "tokens_per_second": 6.0,
+    }
+    assert call.reasoning_present is True
+    assert "private reasoning" not in call.safe_metadata_json()
+
+
+def test_ollama_rejects_returned_model_mismatch() -> None:
+    adapter = OllamaProviderAdapter(
+        model="qwen3:8b",
+        transport=QueueTransport(
+            ProviderHTTPResponse(
+                status_code=200,
+                body={
+                    "model": "qwen3:4b",
+                    "message": {"content": '{"label":"GROUNDED"}'},
+                },
+            )
+        ),
+    )
+
+    call = adapter.judge("prompt", schema=SCHEMA, config=SamplingConfig())
+
+    assert call.api_success is False
+    assert call.error_class == "LOCAL_MODEL_MISMATCH"
+    assert call.assistant_content is None
+
+
+def test_ollama_http_oom_is_classified_without_persisting_body() -> None:
+    adapter = OllamaProviderAdapter(
+        transport=QueueTransport(
+            ProviderHTTPResponse(
+                status_code=500,
+                body={"error": "out of memory at C:/private/path"},
+            )
+        )
+    )
+
+    call = adapter.judge("prompt", schema=SCHEMA, config=SamplingConfig())
+
+    assert call.error_class == "LOCAL_OOM"
+    assert "private/path" not in call.safe_metadata_json()

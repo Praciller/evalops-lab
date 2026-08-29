@@ -5,6 +5,7 @@ import pytest
 from evalops.evaluators.judge.evaluator import JudgeEvaluationTrace
 from evalops.models.hallucination import HallucinationLabel, HallucinationPrediction
 from evalops.pilot.analysis import (
+    build_local_three_evaluator_analysis,
     build_multi_evaluator_analysis,
     compare_pilot_predictions,
     recommend_phase5b_judge,
@@ -208,8 +209,42 @@ def test_multi_evaluator_analysis_supports_three_evaluators_without_llm_voting()
     assert analysis["categories"]["GEMINI_AND_HHEM_CORRECT"] == []
     assert analysis["categories"]["GEMINI_AND_HEURISTIC_CORRECT"] == []
     assert analysis["categories"]["HHEM_AND_HEURISTIC_CORRECT"] == []
-    assert analysis["categories"]["GEMINI_ONLY_CORRECT"] == ["gemini_only"]
+
+
+def test_local_three_evaluator_analysis_uses_human_labels_without_voting() -> None:
+    ground_truth = {
+        "all": HallucinationLabel.GROUNDED,
+        "local_only": HallucinationLabel.HALLUCINATED,
+        "hhem_only": HallucinationLabel.HALLUCINATED,
+        "heuristic_only": HallucinationLabel.GROUNDED,
+    }
+    heuristic = {
+        "all": _prediction("all", HallucinationLabel.GROUNDED),
+        "local_only": _prediction("local_only", HallucinationLabel.GROUNDED),
+        "hhem_only": _prediction("hhem_only", HallucinationLabel.GROUNDED),
+        "heuristic_only": _prediction("heuristic_only", HallucinationLabel.GROUNDED),
+    }
+    hhem = {
+        "all": _prediction("all", HallucinationLabel.GROUNDED),
+        "local_only": _prediction("local_only", HallucinationLabel.GROUNDED),
+        "hhem_only": _prediction("hhem_only", HallucinationLabel.HALLUCINATED),
+        "heuristic_only": _prediction("heuristic_only", HallucinationLabel.HALLUCINATED),
+    }
+    local = {
+        "all": _prediction("all", HallucinationLabel.GROUNDED),
+        "local_only": _prediction("local_only", HallucinationLabel.HALLUCINATED),
+        "hhem_only": _prediction("hhem_only", HallucinationLabel.GROUNDED),
+        "heuristic_only": _prediction("heuristic_only", HallucinationLabel.HALLUCINATED),
+    }
+
+    analysis = build_local_three_evaluator_analysis(ground_truth, heuristic, hhem, local)
+
+    assert analysis["complete_example_count"] == 4
+    assert analysis["categories"]["ALL_CORRECT"] == ["all"]
+    assert analysis["categories"]["LOCAL_LLM_ONLY_CORRECT"] == ["local_only"]
     assert analysis["categories"]["HHEM_ONLY_CORRECT"] == ["hhem_only"]
+    assert analysis["categories"]["HEURISTIC_ONLY_CORRECT"] == ["heuristic_only"]
+    assert analysis["ground_truth_reference"] == "human_labels_no_voting"
 
 
 def test_consistency_reports_pairwise_and_unanimous_agreement() -> None:

@@ -6,7 +6,7 @@ import json
 import re
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
@@ -356,6 +356,96 @@ def _content_text(value: Any) -> str:
     return ""
 
 
+def _default_ollama_transport(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    timeout_seconds: float,
+) -> ProviderHTTPResponse:
+    """Call only the local Ollama HTTP boundary and classify transport failures safely."""
+
+    request = Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310 - loopback URL
+            body_bytes = response.read()
+            body = json.loads(body_bytes.decode("utf-8"))
+            return ProviderHTTPResponse(
+                status_code=response.status,
+                body=body if isinstance(body, dict) else {},
+                headers=dict(response.headers.items()),
+            )
+    except HTTPError as error:
+        try:
+            body = json.loads(error.read().decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            body = {}
+        return ProviderHTTPResponse(
+            status_code=error.code,
+            body=body if isinstance(body, dict) else {},
+            headers=dict(error.headers.items()) if error.headers else {},
+        )
+    except TimeoutError as error:
+        raise RuntimeError("LOCAL_TIMEOUT") from error
+    except (OSError, URLError) as error:
+        raise RuntimeError("LOCAL_CONNECTION_ERROR") from error
+
+
+def _ollama_usage(body: Mapping[str, Any]) -> dict[str, int | float | str] | None:
+    """Project Ollama counters to safe token/timing metadata without response text."""
+
+    aliases = {
+        "prompt_eval_count": "prompt_tokens",
+        "eval_count": "completion_tokens",
+        "total_duration": "total_duration_ns",
+        "load_duration": "load_duration_ns",
+        "prompt_eval_duration": "prompt_eval_duration_ns",
+        "eval_duration": "eval_duration_ns",
+    }
+    usage: dict[str, int | float | str] = {}
+    for source, target in aliases.items():
+        value = body.get(source)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            usage[target] = value
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if isinstance(prompt_tokens, (int, float)) and isinstance(completion_tokens, (int, float)):
+        usage["total_tokens"] = prompt_tokens + completion_tokens
+    eval_duration = usage.get("eval_duration_ns")
+    if isinstance(completion_tokens, (int, float)) and isinstance(eval_duration, (int, float)):
+        if eval_duration > 0:
+            usage["tokens_per_second"] = completion_tokens / (eval_duration / 1_000_000_000)
+    return usage or None
+
+
+def _local_error_class(response: ProviderHTTPResponse) -> str:
+    """Classify local service failures without persisting the local error body."""
+
+    searchable = json.dumps(response.body, ensure_ascii=False).casefold()
+    if any(term in searchable for term in ("out of memory", "outofmemory", "oom")):
+        return "LOCAL_OOM"
+    if any(
+        term in searchable
+        for term in ("failed to load", "insufficient memory", "resource exhausted")
+    ):
+        return "LOCAL_RESOURCE_ERROR"
+    if response.status_code == 404:
+        return "LOCAL_MODEL_NOT_FOUND"
+    if response.status_code in {408, 504}:
+        return "LOCAL_TIMEOUT"
+    if 500 <= response.status_code < 600:
+        return "LOCAL_SERVER_ERROR"
+    return "LOCAL_REQUEST_ERROR"
+
+
+def _local_error_summary(response: ProviderHTTPResponse, error_class: str) -> str:
+    return f"Ollama local request failed with {error_class} (HTTP {response.status_code})."
+
+
 def _common_call(
     *,
     provider: str,
@@ -471,6 +561,166 @@ class _BaseProviderAdapter:
             error_class=error_class,
             safe_error_summary="Provider request did not return a usable completion.",
         )
+
+
+class OllamaProviderAdapter:
+    """Local Ollama chat adapter using structured JSON plus local validation."""
+
+    provider_name = "local-ollama"
+    base_url_identifier = "127.0.0.1:11434/api/chat"
+    gateway = "Ollama local service"
+    routing_immutable = True
+    provider_family = "Local Ollama"
+
+    def __init__(
+        self,
+        *,
+        model: str = "qwen3:8b",
+        transport: Transport | None = None,
+        timeout_seconds: float = 300.0,
+        output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_SCHEMA_STRICT,
+        model_digest: str | None = None,
+        quantization: str | None = None,
+        parameter_size: str | None = None,
+        context_length: int | None = None,
+        inference_device: str = "cpu",
+        thinking_mode: str = "OFF",
+        ollama_version: str | None = None,
+    ) -> None:
+        if not model.strip():
+            raise ValueError("local Ollama model must not be empty")
+        if inference_device not in {"cpu", "gpu", "auto"}:
+            raise ValueError("local Ollama inference_device must be cpu, gpu, or auto")
+        if thinking_mode not in {"ON", "OFF", "UNAVAILABLE"}:
+            raise ValueError("local Ollama thinking_mode must be ON, OFF, or UNAVAILABLE")
+        self.model = model
+        self.output_mode = JudgeOutputMode(output_mode)
+        self._transport = transport or _default_ollama_transport
+        self._timeout_seconds = timeout_seconds
+        self.model_digest = model_digest
+        self.quantization = quantization
+        self.parameter_size = parameter_size
+        self.context_length = context_length
+        self.inference_device = inference_device
+        self.thinking_mode = thinking_mode
+        self.ollama_version = ollama_version
+
+    def _failed_call(self, error_class: str) -> ProviderCall:
+        return ProviderCall(
+            provider=self.provider_name,
+            requested_model=self.model,
+            gateway=self.gateway,
+            backend_revision=self.model_digest,
+            observed_at=datetime.now(UTC).isoformat(),
+            structured_requested=self.output_mode
+            in {
+                JudgeOutputMode.JSON_SCHEMA_STRICT,
+                JudgeOutputMode.JSON_SCHEMA_BEST_EFFORT,
+            },
+            requested_output_mode=self.output_mode,
+            actual_output_mode=self.output_mode,
+            provider_schema_enforced=self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT,
+            local_schema_validated=True,
+            error_class=error_class,
+            safe_error_summary="Ollama local request did not return a usable completion.",
+        )
+
+    def judge(
+        self,
+        prompt: str,
+        *,
+        schema: Mapping[str, Any],
+        config: SamplingConfig,
+    ) -> ProviderCall:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {
+                "temperature": config.temperature,
+                "top_p": config.top_p,
+                "num_predict": config.max_output_tokens,
+            },
+        }
+        structured_requested = False
+        provider_schema_enforced = False
+        if self.output_mode in {
+            JudgeOutputMode.JSON_SCHEMA_STRICT,
+            JudgeOutputMode.JSON_SCHEMA_BEST_EFFORT,
+        }:
+            payload["format"] = dict(schema)
+            structured_requested = True
+            provider_schema_enforced = self.output_mode is JudgeOutputMode.JSON_SCHEMA_STRICT
+        elif self.output_mode is JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION:
+            payload["format"] = "json"
+            structured_requested = True
+        if config.include_reasoning is False:
+            payload["think"] = False
+        started = time.perf_counter()
+        try:
+            response = self._transport(
+                "http://127.0.0.1:11434/api/chat",
+                {"Content-Type": "application/json"},
+                payload,
+                self._timeout_seconds,
+            )
+        except RuntimeError as error:
+            return self._failed_call(str(error))
+        latency_ms = round((time.perf_counter() - started) * 1000, 1)
+        body = response.body
+        message = body.get("message", {})
+        message = message if isinstance(message, Mapping) else {}
+        content = _content_text(message.get("content"))
+        thinking = message.get("thinking")
+        usage = _ollama_usage(body)
+        returned_model = body.get("model")
+        returned_model = str(returned_model) if returned_model else None
+        call = ProviderCall(
+            provider=self.provider_name,
+            requested_model=self.model,
+            gateway=self.gateway,
+            backend_revision=self.model_digest,
+            returned_model=returned_model,
+            model_version=self.model_digest,
+            observed_at=(str(body["created_at"]) if body.get("created_at") else None),
+            api_success=200 <= response.status_code < 300,
+            http_status=response.status_code,
+            response_object_type="chat",
+            finish_reason=(str(body["done_reason"]) if body.get("done_reason") else None),
+            assistant_content=content or None,
+            assistant_content_present=bool(content.strip()),
+            assistant_content_length=len(content),
+            reasoning_present=isinstance(thinking, str) and bool(thinking),
+            reasoning_length=(len(thinking) if isinstance(thinking, str) else 0),
+            usage_metadata_present=usage is not None,
+            usage=usage,
+            request_id=(str(body["id"]) if body.get("id") else None),
+            latency_ms=latency_ms,
+            structured_requested=structured_requested,
+            requested_output_mode=self.output_mode,
+            actual_output_mode=self.output_mode,
+            provider_schema_enforced=provider_schema_enforced,
+            local_schema_validated=True,
+            error_class=(
+                None if 200 <= response.status_code < 300 else _local_error_class(response)
+            ),
+            safe_error_summary=(
+                None
+                if 200 <= response.status_code < 300
+                else _local_error_summary(response, _local_error_class(response))
+            ),
+        )
+        if call.api_success and returned_model != self.model:
+            return replace(
+                call,
+                api_success=False,
+                assistant_content=None,
+                assistant_content_present=False,
+                assistant_content_length=0,
+                error_class="LOCAL_MODEL_MISMATCH",
+                safe_error_summary="Ollama returned a different model than requested.",
+            )
+        return call
 
 
 class GeminiProviderAdapter(_BaseProviderAdapter):

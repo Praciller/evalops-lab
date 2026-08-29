@@ -385,6 +385,62 @@ def build_multi_evaluator_analysis(
     }
 
 
+def build_local_three_evaluator_analysis(
+    ground_truth: Mapping[str, HallucinationLabel],
+    heuristic: Mapping[str, HallucinationPrediction],
+    hhem: Mapping[str, HallucinationPrediction],
+    local_llm: Mapping[str, HallucinationPrediction],
+) -> dict[str, Any]:
+    """Compare heuristic, HHEM, and local LLM predictions against human labels."""
+
+    expected = set(ground_truth)
+    observed = {"heuristic": heuristic, "hhem": hhem, "local_llm": local_llm}
+    missing = {
+        name: sorted(expected - set(values))
+        for name, values in observed.items()
+        if set(values) != expected
+    }
+    complete_ids = set.intersection(expected, *(set(values) for values in observed.values()))
+    categories: dict[str, list[str]] = {
+        "ALL_CORRECT": [],
+        "ALL_WRONG": [],
+        "LOCAL_LLM_ONLY_CORRECT": [],
+        "HHEM_ONLY_CORRECT": [],
+        "HEURISTIC_ONLY_CORRECT": [],
+        "LOCAL_LLM_AND_HHEM_CORRECT": [],
+        "LOCAL_LLM_AND_HEURISTIC_CORRECT": [],
+        "HHEM_AND_HEURISTIC_CORRECT": [],
+    }
+    for example_id in sorted(complete_ids):
+        actual = ground_truth[example_id]
+        correctness = {
+            name: values[example_id].label is actual for name, values in observed.items()
+        }
+        correct_names = {name for name, is_correct in correctness.items() if is_correct}
+        if len(correct_names) == 3:
+            categories["ALL_CORRECT"].append(example_id)
+        elif not correct_names:
+            categories["ALL_WRONG"].append(example_id)
+        elif correct_names == {"local_llm"}:
+            categories["LOCAL_LLM_ONLY_CORRECT"].append(example_id)
+        elif correct_names == {"hhem"}:
+            categories["HHEM_ONLY_CORRECT"].append(example_id)
+        elif correct_names == {"heuristic"}:
+            categories["HEURISTIC_ONLY_CORRECT"].append(example_id)
+        if {"local_llm", "hhem"}.issubset(correct_names):
+            categories["LOCAL_LLM_AND_HHEM_CORRECT"].append(example_id)
+        if {"local_llm", "heuristic"}.issubset(correct_names):
+            categories["LOCAL_LLM_AND_HEURISTIC_CORRECT"].append(example_id)
+        if {"hhem", "heuristic"}.issubset(correct_names):
+            categories["HHEM_AND_HEURISTIC_CORRECT"].append(example_id)
+    return {
+        "complete_example_count": len(complete_ids),
+        "missing_by_evaluator": missing,
+        "categories": categories,
+        "ground_truth_reference": "human_labels_no_voting",
+    }
+
+
 def summarize_consistency(records: Sequence[PilotRunRecord]) -> dict[str, Any]:
     """Measure repeated labels without replacing the primary run prediction."""
 
