@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 
 from scripts.run_phase5a_local_pilot import (
@@ -8,10 +10,30 @@ from scripts.run_phase5a_local_pilot import (
     PILOT_ID,
     PREFERRED_MODEL,
     _assert_no_prompt_leakage,
+    _evaluate_local_primary,
     _fallback_eligible,
     _local_recommendation,
     _ollama_metadata,
 )
+
+
+def test_strict_only_primary_path_does_not_promote_plain_json_fallback() -> None:
+    strict = Mock()
+    plain = Mock()
+    strict.evaluate_with_trace.return_value = "strict-trace"
+
+    result = _evaluate_local_primary(
+        strict,
+        plain,
+        "context",
+        "response",
+        "example",
+        strict_only=True,
+    )
+
+    assert result == "strict-trace"
+    strict.evaluate_with_trace.assert_called_once_with("context", "response", "example")
+    plain.evaluate_with_trace.assert_not_called()
 
 
 def test_local_experiment_has_separate_identity_and_state_from_gemini() -> None:

@@ -472,6 +472,22 @@ def _evaluate_local_with_fallback(
     return plain.evaluate_with_trace(context, response, example_id)
 
 
+def _evaluate_local_primary(
+    strict: LLMJudgeEvaluator,
+    plain: LLMJudgeEvaluator,
+    context: str,
+    response: str,
+    example_id: str,
+    *,
+    strict_only: bool,
+):
+    """Keep primary resume results on the frozen strict output path when requested."""
+
+    if strict_only:
+        return strict.evaluate_with_trace(context, response, example_id)
+    return _evaluate_local_with_fallback(strict, plain, context, response, example_id)
+
+
 def _fallback_eligible(result: Mapping[str, object]) -> bool:
     errors = {str(value) for value in result.get("errors", []) if value}
     return bool(errors.intersection({"LOCAL_OOM", "LOCAL_RESOURCE_ERROR", "LOCAL_MODEL_NOT_FOUND"}))
@@ -801,8 +817,13 @@ def _run_local(args: argparse.Namespace) -> dict[str, object]:
     )
 
     def evaluate_local(context: str, response: str, example_id: str):
-        return _evaluate_local_with_fallback(
-            strict_evaluator, plain_evaluator, context, response, example_id
+        return _evaluate_local_primary(
+            strict_evaluator,
+            plain_evaluator,
+            context,
+            response,
+            example_id,
+            strict_only=args.strict_only,
         )
 
     expected_model_version = str(model_metadata.get("model_digest"))
@@ -913,6 +934,9 @@ def _run_local(args: argparse.Namespace) -> dict[str, object]:
         "model_version": expected_model_version,
         "model_version_check": continuity.status,
         "thinking_mode": "OFF",
+        "primary_output_path": (
+            "json-schema-strict" if args.strict_only else "strict-with-local-validation-fallback"
+        ),
         "preflight_artifact": str(args.preflight_artifact.relative_to(REPO_ROOT)),
         "preflight_status": preflight["LOCAL_PREFLIGHT"],
         "leakage_check": "PASS",
@@ -1011,8 +1035,13 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, object]:
     )
 
     def evaluate_local(context: str, response: str, example_id: str):
-        return _evaluate_local_with_fallback(
-            strict_evaluator, plain_evaluator, context, response, example_id
+        return _evaluate_local_primary(
+            strict_evaluator,
+            plain_evaluator,
+            context,
+            response,
+            example_id,
+            strict_only=args.strict_only,
         )
 
     budget = RequestBudget(None)
@@ -1089,6 +1118,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--preflight-artifact", type=Path, default=DEFAULT_PREFLIGHT)
     parser.add_argument("--heuristic-artifact", type=Path, default=HEURISTIC_ARTIFACT)
     parser.add_argument("--hhem-artifact", type=Path, default=HHEM_ARTIFACT)
+    parser.add_argument(
+        "--strict-only",
+        action="store_true",
+        help="Use only the frozen native JSON-schema output path for primary/consistency calls.",
+    )
     return parser
 
 
