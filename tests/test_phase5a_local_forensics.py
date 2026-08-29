@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from scripts.run_phase5a_local_forensics import classify_assistant_content
+from scripts.run_phase5a_local_forensics import (
+    _failure_breakdown,
+    classify_assistant_content,
+)
 
 
 def test_forensics_classifies_empty_and_invalid_json_without_repair() -> None:
@@ -29,3 +32,25 @@ def test_forensics_classifies_semantic_consistency_without_changing_values() -> 
 
     assert result["category"] == "LABEL_CLAIM_CONSISTENCY_FAILURE"
     assert result["json_parse_success"] is True
+
+
+def test_forensics_uses_finish_reason_to_identify_output_token_limit() -> None:
+    state = {
+        "records": {
+            "local-ollama:one": {
+                "example_id": "one",
+                "status": "FAILED",
+                "trace": {"error_class": "PARSE_ERROR", "finish_reason": "length"},
+            },
+            "local-ollama:two": {
+                "example_id": "two",
+                "status": "FAILED",
+                "trace": {"error_class": "SCHEMA_VALIDATION_ERROR", "finish_reason": "stop"},
+            },
+        }
+    }
+
+    result = _failure_breakdown(state, ["one", "two"])
+
+    assert result["OUTPUT_TOKEN_LIMIT"]["example_ids"] == ["one"]
+    assert result["PERSISTED_SCHEMA_VALIDATION_SUBTYPE_UNKNOWN"]["example_ids"] == ["two"]

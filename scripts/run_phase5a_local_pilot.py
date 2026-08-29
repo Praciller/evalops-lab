@@ -817,7 +817,7 @@ def _run_local(args: argparse.Namespace) -> dict[str, object]:
     )
 
     def evaluate_local(context: str, response: str, example_id: str):
-        return _evaluate_local_primary(
+        trace = _evaluate_local_primary(
             strict_evaluator,
             plain_evaluator,
             context,
@@ -825,6 +825,8 @@ def _run_local(args: argparse.Namespace) -> dict[str, object]:
             example_id,
             strict_only=args.strict_only,
         )
+        continuity.observe(trace.model_version)
+        return trace
 
     expected_model_version = str(model_metadata.get("model_digest"))
     continuity = ModelVersionContinuity({expected_model_version})
@@ -1033,9 +1035,10 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, object]:
     strict_evaluator, plain_evaluator = _local_evaluator(
         metadata, timeout_seconds=args.timeout_seconds
     )
+    continuity = ModelVersionContinuity({str(metadata["model_digest"])})
 
     def evaluate_local(context: str, response: str, example_id: str):
-        return _evaluate_local_primary(
+        trace = _evaluate_local_primary(
             strict_evaluator,
             plain_evaluator,
             context,
@@ -1043,6 +1046,8 @@ def _run_consistency(args: argparse.Namespace) -> dict[str, object]:
             example_id,
             strict_only=args.strict_only,
         )
+        continuity.observe(trace.model_version)
+        return trace
 
     budget = RequestBudget(None)
     repeated: list[PilotRunRecord] = []

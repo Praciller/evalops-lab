@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -145,6 +146,20 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _git_head() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
 def _manifest_and_state(
     manifest_path: Path, state_path: Path
 ) -> tuple[PilotManifest, dict[str, Any]]:
@@ -193,6 +208,38 @@ def _safe_record_evidence(state: dict[str, Any]) -> dict[str, Any]:
         "raw_model_response_persisted": False,
         "reasoning_persisted": False,
     }
+
+
+def _failure_breakdown(state: dict[str, Any], manifest_ids: list[str]) -> dict[str, Any]:
+    """Classify only what safe persisted metadata proves."""
+
+    groups: dict[str, list[str]] = {}
+    for record in state["records"].values():
+        if not isinstance(record, dict) or record.get("status") == "SUCCESS":
+            continue
+        trace = record.get("trace")
+        trace = trace if isinstance(trace, dict) else {}
+        error_class = trace.get("error_class")
+        finish_reason = trace.get("finish_reason")
+        if error_class == "PARSE_ERROR" and finish_reason == "length":
+            category = "OUTPUT_TOKEN_LIMIT"
+        elif error_class == "PARSE_ERROR":
+            category = "PERSISTED_PARSE_ERROR_SUBTYPE_UNKNOWN"
+        elif error_class == "SCHEMA_VALIDATION_ERROR":
+            category = "PERSISTED_SCHEMA_VALIDATION_SUBTYPE_UNKNOWN"
+        else:
+            category = str(error_class or "UNKNOWN_FAILURE")
+        groups.setdefault(category, []).append(str(record.get("example_id")))
+    result: dict[str, Any] = {}
+    for category, example_ids in groups.items():
+        ordered_ids = [example_id for example_id in manifest_ids if example_id in example_ids]
+        result[category] = {
+            "count": len(ordered_ids),
+            "example_ids": ordered_ids,
+            "original_generated_response_preserved": False,
+            "recovery_possible_without_inference": False,
+        }
+    return dict(sorted(result.items()))
 
 
 def _counts(values: list[str]) -> dict[str, int]:
@@ -313,13 +360,25 @@ def run_forensics(
         "diagnostic_only": True,
         "counts_as_primary_prediction": False,
         "experiment_id": "ragtruth-local-llm-judge-pilot-v1",
-        "source_git_commit": "cce4cf74d793ee172db824d96fef3a9c16c16c60",
+        "source_git_commit": _git_head(),
         "pilot_size": len(manifest_ids),
         "successful_count": len(successful_ids),
         "pending_count": len(pending_ids),
         "first_pending_id": pending_ids[0] if pending_ids else None,
         "pending_ids": pending_ids,
         "persisted_evidence": _safe_record_evidence(state),
+        "failure_breakdown": _failure_breakdown(state, manifest_ids),
+        "parser_repair_allowed": False,
+        "parser_repair_gate": {
+            "deterministic": False,
+            "content_preserving": False,
+            "label_independent": False,
+            "original_outputs_available": False,
+            "uniform_reparse_possible": False,
+            "reason": (
+                "The persisted state retains safe metadata only, not original output content."
+            ),
+        },
         "configuration": {
             "model": model_metadata.get("requested_model"),
             "model_digest": model_digest,
