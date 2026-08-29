@@ -2,15 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from evalops.evaluators.judge.providers import (
     GeminiProviderAdapter,
     GroqProviderAdapter,
     JudgeOutputMode,
     OKMDProviderAdapter,
+    OllamaJudgeConfig,
     OllamaProviderAdapter,
     OpenRouterProviderAdapter,
     ProviderHTTPResponse,
     SamplingConfig,
+    schema_sha256,
 )
 
 
@@ -462,3 +466,86 @@ def test_ollama_http_oom_is_classified_without_persisting_body() -> None:
 
     assert call.error_class == "LOCAL_OOM"
     assert "private/path" not in call.safe_metadata_json()
+
+
+def test_ollama_v2_config_serializes_frozen_native_transport() -> None:
+    transport = QueueTransport(
+        ProviderHTTPResponse(
+            status_code=200,
+            body={
+                "model": "qwen3:8b",
+                "message": {"content": '{"label":"GROUNDED"}'},
+                "done_reason": "stop",
+            },
+        )
+    )
+    config = OllamaJudgeConfig(
+        model="qwen3:8b",
+        model_digest="ollama-id:test;weights:sha256:test",
+        schema_hash=schema_sha256(SCHEMA),
+        semantic_prompt_hash="prompt-hash",
+    )
+    adapter = OllamaProviderAdapter(judge_config=config, transport=transport)
+
+    call = adapter.judge(
+        "prompt",
+        schema=SCHEMA,
+        config=SamplingConfig(max_output_tokens=512, include_reasoning=False),
+    )
+
+    payload = transport.calls[0]["payload"]
+    assert payload["stream"] is False
+    assert payload["think"] is False
+    assert payload["format"] == SCHEMA
+    assert payload["options"] == {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "num_predict": 512,
+    }
+    assert "num_ctx" not in payload["options"]
+    assert "keep_alive" not in payload
+    assert call.api_success is True
+    assert adapter.transport_version == "ollama-qwen3-structured-v2"
+    assert adapter.transport_hash == config.transport_hash()
+
+
+def test_ollama_v2_config_rejects_sampling_or_schema_drift_before_request() -> None:
+    transport = QueueTransport(
+        ProviderHTTPResponse(
+            status_code=200,
+            body={"model": "qwen3:8b", "message": {"content": "{}"}},
+        )
+    )
+    config = OllamaJudgeConfig(
+        model="qwen3:8b",
+        model_digest="ollama-id:test;weights:sha256:test",
+        schema_hash=schema_sha256(SCHEMA),
+    )
+    adapter = OllamaProviderAdapter(judge_config=config, transport=transport)
+
+    with pytest.raises(ValueError, match="max_output_tokens"):
+        adapter.judge(
+            "prompt",
+            schema=SCHEMA,
+            config=SamplingConfig(max_output_tokens=256),
+        )
+    with pytest.raises(ValueError, match="LOCAL_SCHEMA_HASH_MISMATCH"):
+        adapter.judge(
+            "prompt",
+            schema={**SCHEMA, "title": "drift"},
+            config=SamplingConfig(max_output_tokens=512),
+        )
+    assert transport.calls == []
+
+
+def test_ollama_v2_config_canonical_hash_is_stable_and_records_absent_options() -> None:
+    config = OllamaJudgeConfig(
+        model="qwen3:8b",
+        model_digest="ollama-id:test;weights:sha256:test",
+        schema_hash="schema-hash",
+        semantic_prompt_hash="prompt-hash",
+    )
+    assert config.canonical_dict()["num_ctx"] is None
+    assert config.canonical_dict()["keep_alive"] is None
+    assert config.canonical_dict()["num_predict"] == 512
+    assert config.transport_hash() == config.transport_hash()

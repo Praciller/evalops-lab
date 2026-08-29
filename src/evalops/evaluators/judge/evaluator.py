@@ -110,6 +110,7 @@ class LLMJudgeEvaluator:
 
     @property
     def config(self) -> dict[str, Any]:
+        judge_config = getattr(self.provider, "judge_config", None)
         return {
             "provider": self.provider.provider_name,
             "base_url_identifier": self.provider.base_url_identifier,
@@ -124,6 +125,9 @@ class LLMJudgeEvaluator:
             "inference_device": getattr(self.provider, "inference_device", None),
             "thinking_mode": getattr(self.provider, "thinking_mode", None),
             "ollama_version": getattr(self.provider, "ollama_version", None),
+            "transport_version": getattr(self.provider, "transport_version", None),
+            "transport_hash": getattr(self.provider, "transport_hash", None),
+            "transport_config": judge_config.canonical_dict() if judge_config is not None else None,
             "routing_immutable": getattr(self.provider, "routing_immutable", None),
             "prompt_version": JUDGE_PROMPT_VERSION,
             "prompt_sha256": JUDGE_PROMPT_SHA256,
@@ -138,12 +142,12 @@ class LLMJudgeEvaluator:
             },
         }
 
-    def evaluate_with_trace(
+    def evaluate_with_trace_and_content(
         self,
         context: str,
         response: str,
         example_id: str = "",
-    ) -> JudgeEvaluationTrace:
+    ) -> tuple[JudgeEvaluationTrace, str | None]:
         prompt = render_judge_prompt(context, response)
         call = self.provider.judge(
             prompt,
@@ -175,7 +179,7 @@ class LLMJudgeEvaluator:
             else:
                 error_class = parse_result.error_class
                 safe_error_summary = parse_result.safe_error_summary
-        return JudgeEvaluationTrace(
+        trace = JudgeEvaluationTrace(
             example_id=example_id,
             provider=call.provider,
             requested_model=call.requested_model,
@@ -214,6 +218,16 @@ class LLMJudgeEvaluator:
             error_class=error_class,
             safe_error_summary=safe_error_summary,
         )
+        return trace, call.assistant_content
+
+    def evaluate_with_trace(
+        self,
+        context: str,
+        response: str,
+        example_id: str = "",
+    ) -> JudgeEvaluationTrace:
+        trace, _ = self.evaluate_with_trace_and_content(context, response, example_id)
+        return trace
 
     def evaluate(
         self,

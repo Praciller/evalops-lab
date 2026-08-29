@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -44,6 +45,77 @@ class JudgeOutputMode(StrEnum):
     JSON_SCHEMA_BEST_EFFORT = "json-schema-best-effort"
     JSON_OBJECT_LOCAL_VALIDATION = "json-object-local-validation"
     JSON_TEXT_LOCAL_VALIDATION = "json-text-local-validation"
+
+
+def schema_sha256(schema: Mapping[str, Any]) -> str:
+    """Hash a JSON-compatible schema using one canonical representation."""
+
+    canonical = json.dumps(schema, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class OllamaJudgeConfig:
+    """Frozen local transport contract for a native structured-output pilot."""
+
+    model: str
+    model_digest: str
+    output_mode: JudgeOutputMode = JudgeOutputMode.JSON_SCHEMA_STRICT
+    temperature: float = 0.0
+    top_p: float = 1.0
+    num_predict: int = 512
+    num_ctx: int | None = None
+    think: bool = False
+    stream: bool = False
+    keep_alive: str | None = None
+    transport_version: str = "ollama-qwen3-structured-v2"
+    schema_hash: str | None = None
+    semantic_prompt_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "output_mode", JudgeOutputMode(self.output_mode))
+        if not self.model.strip():
+            raise ValueError("local Ollama model must not be empty")
+        if not self.model_digest.strip():
+            raise ValueError("local Ollama model digest must not be empty")
+        if self.output_mode is not JudgeOutputMode.JSON_SCHEMA_STRICT:
+            raise ValueError("frozen local v2 transport requires native JSON Schema output")
+        if self.temperature < 0:
+            raise ValueError("temperature must not be negative")
+        if self.top_p <= 0 or self.top_p > 1:
+            raise ValueError("top_p must be in the range (0, 1]")
+        if self.num_predict < 1:
+            raise ValueError("num_predict must be positive")
+        if self.num_ctx is not None and self.num_ctx < 1:
+            raise ValueError("num_ctx must be positive when provided")
+        if not self.transport_version.strip():
+            raise ValueError("transport_version must not be empty")
+
+    def canonical_dict(self) -> dict[str, Any]:
+        """Return the persisted-safe canonical transport configuration."""
+
+        return {
+            "endpoint_type": "ollama-local-chat",
+            "format_mode": "native-json-schema",
+            "keep_alive": self.keep_alive,
+            "model": self.model,
+            "model_digest": self.model_digest,
+            "num_ctx": self.num_ctx,
+            "num_predict": self.num_predict,
+            "schema_hash": self.schema_hash,
+            "semantic_prompt_hash": self.semantic_prompt_hash,
+            "stream": self.stream,
+            "temperature": self.temperature,
+            "think": self.think,
+            "top_p": self.top_p,
+            "transport_version": self.transport_version,
+        }
+
+    def transport_hash(self) -> str:
+        canonical = json.dumps(
+            self.canonical_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -575,7 +647,7 @@ class OllamaProviderAdapter:
     def __init__(
         self,
         *,
-        model: str = "qwen3:8b",
+        model: str | None = None,
         transport: Transport | None = None,
         timeout_seconds: float = 300.0,
         output_mode: JudgeOutputMode | str = JudgeOutputMode.JSON_SCHEMA_STRICT,
@@ -586,8 +658,24 @@ class OllamaProviderAdapter:
         inference_device: str = "cpu",
         thinking_mode: str = "OFF",
         ollama_version: str | None = None,
+        judge_config: OllamaJudgeConfig | None = None,
     ) -> None:
-        if not model.strip():
+        if judge_config is not None:
+            if model is not None and model != judge_config.model:
+                raise ValueError("local Ollama model conflicts with frozen judge config")
+            if (
+                output_mode != JudgeOutputMode.JSON_SCHEMA_STRICT
+                and JudgeOutputMode(output_mode) != judge_config.output_mode
+            ):
+                raise ValueError("local Ollama output mode conflicts with frozen judge config")
+            if model_digest is not None and model_digest != judge_config.model_digest:
+                raise ValueError("local Ollama model digest conflicts with frozen judge config")
+            model = judge_config.model
+            output_mode = judge_config.output_mode
+            model_digest = judge_config.model_digest
+        elif model is None:
+            model = "qwen3:8b"
+        if model is None or not model.strip():
             raise ValueError("local Ollama model must not be empty")
         if inference_device not in {"cpu", "gpu", "auto"}:
             raise ValueError("local Ollama inference_device must be cpu, gpu, or auto")
@@ -604,6 +692,11 @@ class OllamaProviderAdapter:
         self.inference_device = inference_device
         self.thinking_mode = thinking_mode
         self.ollama_version = ollama_version
+        self.judge_config = judge_config
+        self.transport_version = (
+            judge_config.transport_version if judge_config is not None else None
+        )
+        self.transport_hash = judge_config.transport_hash() if judge_config is not None else None
 
     def _failed_call(self, error_class: str) -> ProviderCall:
         return ProviderCall(
@@ -632,10 +725,20 @@ class OllamaProviderAdapter:
         schema: Mapping[str, Any],
         config: SamplingConfig,
     ) -> ProviderCall:
+        frozen = self.judge_config
+        if frozen is not None:
+            if config.temperature != frozen.temperature or config.top_p != frozen.top_p:
+                raise ValueError("sampling conflicts with frozen local judge config")
+            if config.max_output_tokens != frozen.num_predict:
+                raise ValueError("max_output_tokens conflicts with frozen local judge config")
+            if config.include_reasoning != frozen.think:
+                raise ValueError("reasoning setting conflicts with frozen local judge config")
+            if frozen.schema_hash is not None and schema_sha256(schema) != frozen.schema_hash:
+                raise ValueError("LOCAL_SCHEMA_HASH_MISMATCH")
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
+            "stream": frozen.stream if frozen is not None else False,
             "options": {
                 "temperature": config.temperature,
                 "top_p": config.top_p,
@@ -654,7 +757,13 @@ class OllamaProviderAdapter:
         elif self.output_mode is JudgeOutputMode.JSON_OBJECT_LOCAL_VALIDATION:
             payload["format"] = "json"
             structured_requested = True
-        if config.include_reasoning is False:
+        if frozen is not None:
+            if frozen.num_ctx is not None:
+                payload["options"]["num_ctx"] = frozen.num_ctx
+            if frozen.keep_alive is not None:
+                payload["keep_alive"] = frozen.keep_alive
+            payload["think"] = frozen.think
+        elif config.include_reasoning is False:
             payload["think"] = False
         started = time.perf_counter()
         try:

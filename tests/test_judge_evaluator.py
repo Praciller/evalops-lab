@@ -165,3 +165,35 @@ def test_public_evaluator_output_is_separate_from_judge_reason() -> None:
 
     assert prediction.label is not JudgeLabel.HALLUCINATED
     assert '"reason":"Supported."' not in prediction.model_dump_json()
+
+
+def test_trace_with_content_exposes_raw_output_only_to_in_memory_diagnostics() -> None:
+    adapter = GroqProviderAdapter(
+        "secret-not-persisted",
+        transport=FixedTransport(
+            {
+                "object": "chat.completion",
+                "model": "openai/gpt-oss-20b",
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"label":"GROUNDED","confidence":0.6,'
+                                '"unsupported_claims":[],"reason":"Supported."}'
+                            )
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        ),
+    )
+
+    trace, content = LLMJudgeEvaluator(adapter).evaluate_with_trace_and_content(
+        "context", "response", "diagnostic"
+    )
+
+    assert trace.prediction is not None
+    assert content is not None
+    assert '"reason":"Supported."' in content
+    assert "hidden reasoning" not in trace.model_dump_json()
