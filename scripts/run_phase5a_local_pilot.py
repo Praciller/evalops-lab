@@ -1000,7 +1000,12 @@ def _run_local(args: argparse.Namespace) -> dict[str, object]:
             "Review the completed local LLM judge pilot against HHEM before authorizing a full "
             "2,675-example local run."
             if primary_complete
-            else "Resume the local pilot after resolving the recorded local technical failure."
+            else (
+                "The strict-v1 resume is exhausted; owner authorization is required before any "
+                "new local experiment or request configuration change."
+                if args.strict_only
+                else "Resume the local pilot after resolving the recorded local technical failure."
+            )
         ),
     }
     _write_json(args.report, report)
