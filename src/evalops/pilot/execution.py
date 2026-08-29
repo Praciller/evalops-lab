@@ -109,6 +109,7 @@ def run_provider_pilot(
     parse_regenerations: Mapping[str, int] | None = None,
     scheduler: RateAwareRequestScheduler | None = None,
     success_observer: Callable[[PilotRunRecord], None] | None = None,
+    record_observer: Callable[[PilotRunRecord], None] | None = None,
 ) -> list[PilotRunRecord]:
     """Evaluate exact manifest IDs sequentially with bounded transient retries."""
 
@@ -149,6 +150,8 @@ def run_provider_pilot(
                             trace=trace,
                         )
                         state_store.upsert(failed_record)
+                        if record_observer is not None:
+                            record_observer(failed_record)
                         raise
                 if (
                     trace.prediction is None
@@ -169,6 +172,8 @@ def run_provider_pilot(
                 if record.trace.prediction is not None and success_observer is not None:
                     success_observer(record)
                 state_store.upsert(record)
+                if record_observer is not None:
+                    record_observer(record)
                 if trace.prediction is not None:
                     results.append(record)
                     break
