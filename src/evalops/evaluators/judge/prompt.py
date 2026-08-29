@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from html import escape
 
 JUDGE_PROMPT_VERSION = "ragtruth-strict-groundedness-judge-v1"
 JUDGE_SCHEMA_VERSION = "ragtruth-llm-judge-output-v1"
+CLASSIFICATION_SCHEMA_VERSION = "ragtruth-llm-judge-classification-v1"
 
 JUDGE_OUTPUT_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -17,6 +19,16 @@ JUDGE_OUTPUT_SCHEMA: dict[str, object] = {
         "reason": {"type": "string"},
     },
     "required": ["label", "confidence", "unsupported_claims", "reason"],
+    "additionalProperties": False,
+}
+
+CLASSIFICATION_OUTPUT_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string", "enum": ["HALLUCINATED", "GROUNDED"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+    "required": ["label", "confidence"],
     "additionalProperties": False,
 }
 
@@ -41,6 +53,21 @@ _PROMPT_TEMPLATE = (
 
 JUDGE_PROMPT_SHA256 = hashlib.sha256(_PROMPT_TEMPLATE.encode("utf-8")).hexdigest()
 
+CLASSIFICATION_TRANSPORT_VERSION = "ollama-qwen3-classification-v3"
+_CLASSIFICATION_SCHEMA_JSON = json.dumps(
+    CLASSIFICATION_OUTPUT_SCHEMA, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+)
+_CLASSIFICATION_TRANSPORT_TEMPLATE = (
+    "For this local structured-output request, return only one JSON object matching this "
+    "exact schema. Do not include any other property, explanation, or chain-of-thought.\n"
+    "<output_schema>\n"
+    f"{_CLASSIFICATION_SCHEMA_JSON}\n"
+    "</output_schema>"
+)
+CLASSIFICATION_TRANSPORT_PROMPT_SHA256 = hashlib.sha256(
+    _CLASSIFICATION_TRANSPORT_TEMPLATE.encode("utf-8")
+).hexdigest()
+
 
 def render_judge_prompt(source_context: str, response: str) -> str:
     """Render the frozen prompt with escaped untrusted data sections."""
@@ -48,4 +75,12 @@ def render_judge_prompt(source_context: str, response: str) -> str:
     return _PROMPT_TEMPLATE.format(
         source_context=escape(source_context, quote=False),
         response=escape(response, quote=False),
+    )
+
+
+def render_classification_judge_prompt(source_context: str, response: str) -> str:
+    """Render unchanged semantics plus the classification-only transport contract."""
+
+    return (
+        f"{render_judge_prompt(source_context, response)}\n\n{_CLASSIFICATION_TRANSPORT_TEMPLATE}"
     )

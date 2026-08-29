@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from evalops.evaluators.judge.prompt import (
+    CLASSIFICATION_OUTPUT_SCHEMA,
+    CLASSIFICATION_SCHEMA_VERSION,
+    CLASSIFICATION_TRANSPORT_PROMPT_SHA256,
     JUDGE_PROMPT_SHA256,
     JUDGE_PROMPT_VERSION,
+    render_classification_judge_prompt,
     render_judge_prompt,
 )
 
@@ -40,3 +44,14 @@ def test_prompt_builder_has_no_human_label_or_baseline_fields() -> None:
         "benchmark_metric",
     ):
         assert forbidden not in prompt
+
+
+def test_classification_prompt_preserves_semantics_and_adds_transport_schema() -> None:
+    prompt = render_classification_judge_prompt("Evidence only.", "A response only.")
+
+    assert CLASSIFICATION_SCHEMA_VERSION == "ragtruth-llm-judge-classification-v1"
+    assert len(CLASSIFICATION_TRANSPORT_PROMPT_SHA256) == 64
+    assert render_judge_prompt("Evidence only.", "A response only.") in prompt
+    assert '"additionalProperties":false' in prompt
+    assert '"properties":{"confidence"' in prompt or '"properties":{"label"' in prompt
+    assert CLASSIFICATION_OUTPUT_SCHEMA["required"] == ["label", "confidence"]

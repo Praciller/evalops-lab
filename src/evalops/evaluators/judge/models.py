@@ -38,19 +38,31 @@ class JudgeDecision(BaseModel):
         return self
 
 
+class JudgeClassificationDecision(BaseModel):
+    """Primary classification-only decision without evidence metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: JudgeLabel
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
 class JudgeParseResult(BaseModel):
     """Safe parse outcome used by provider traces and pilot state."""
 
     model_config = ConfigDict(extra="forbid")
 
     success: bool
-    decision: JudgeDecision | None = None
+    decision: JudgeDecision | JudgeClassificationDecision | None = None
     error_class: str | None = None
     safe_error_summary: str | None = None
 
 
-def parse_judge_payload(payload: str | bytes | Any) -> JudgeParseResult:
-    """Parse and validate one provider content value without semantic repair."""
+def _parse_payload(
+    payload: str | bytes | Any,
+    decision_model: type[JudgeDecision] | type[JudgeClassificationDecision],
+) -> JudgeParseResult:
+    """Parse one provider content value against one immutable decision contract."""
 
     try:
         parsed = json.loads(payload) if isinstance(payload, (str, bytes)) else payload
@@ -67,7 +79,7 @@ def parse_judge_payload(payload: str | bytes | Any) -> JudgeParseResult:
             safe_error_summary="Judge JSON root was not an object.",
         )
     try:
-        decision = JudgeDecision.model_validate(parsed)
+        decision = decision_model.model_validate(parsed)
     except ValidationError:
         return JudgeParseResult(
             success=False,
@@ -75,3 +87,15 @@ def parse_judge_payload(payload: str | bytes | Any) -> JudgeParseResult:
             safe_error_summary="Judge JSON failed the required schema or consistency rules.",
         )
     return JudgeParseResult(success=True, decision=decision)
+
+
+def parse_judge_payload(payload: str | bytes | Any) -> JudgeParseResult:
+    """Parse and validate the full evidence-bearing judge contract."""
+
+    return _parse_payload(payload, JudgeDecision)
+
+
+def parse_classification_judge_payload(payload: str | bytes | Any) -> JudgeParseResult:
+    """Parse and validate the classification-only primary judge contract."""
+
+    return _parse_payload(payload, JudgeClassificationDecision)

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 from evalops.evaluators.judge.models import (
+    JudgeClassificationDecision,
     JudgeDecision,
     JudgeParseResult,
     parse_judge_payload,
@@ -39,7 +41,7 @@ class JudgeEvaluationTrace(BaseModel):
     returned_provider: str | None = None
     backend_revision: str | None = None
     prediction: HallucinationPrediction | None = None
-    decision: JudgeDecision | None = None
+    decision: JudgeDecision | JudgeClassificationDecision | None = None
     api_success: bool = False
     parse_success: bool = False
     structured_output_status: str = "NOT_RUN"
@@ -71,10 +73,11 @@ class JudgeEvaluationError(RuntimeError):
 
 
 def _prediction_from_decision(
-    decision: JudgeDecision,
+    decision: JudgeDecision | JudgeClassificationDecision,
     *,
     example_id: str,
     evaluator_config: dict[str, Any],
+    evaluator_version: str,
 ) -> HallucinationPrediction:
     label = HallucinationLabel(decision.label.value)
     score = (
@@ -88,7 +91,7 @@ def _prediction_from_decision(
         score=score,
         support_score=1.0 - score,
         evaluator_name="llm-judge",
-        evaluator_version=JUDGE_PROMPT_VERSION,
+        evaluator_version=evaluator_version,
         evaluator_config=evaluator_config,
     )
 
@@ -104,9 +107,28 @@ class LLMJudgeEvaluator:
         provider: JudgeProvider,
         *,
         sampling: SamplingConfig | None = None,
+        prompt_renderer: Callable[[str, str], str] = render_judge_prompt,
+        output_schema: Mapping[str, Any] = JUDGE_OUTPUT_SCHEMA,
+        prompt_version: str = JUDGE_PROMPT_VERSION,
+        prompt_sha256: str = JUDGE_PROMPT_SHA256,
+        schema_version: str = JUDGE_SCHEMA_VERSION,
+        parser: Callable[[str | bytes | Any], JudgeParseResult] = parse_judge_payload,
+        evaluator_version: str = JUDGE_PROMPT_VERSION,
+        transport_prompt_version: str | None = None,
+        transport_prompt_sha256: str | None = None,
     ) -> None:
         self.provider = provider
         self.sampling = sampling or SamplingConfig()
+        self._prompt_renderer = prompt_renderer
+        self._output_schema = output_schema
+        self._prompt_version = prompt_version
+        self._prompt_sha256 = prompt_sha256
+        self._schema_version = schema_version
+        self._parser = parser
+        self._evaluator_version = evaluator_version
+        self._transport_prompt_version = transport_prompt_version
+        self._transport_prompt_sha256 = transport_prompt_sha256
+        self.version = evaluator_version
 
     @property
     def config(self) -> dict[str, Any]:
@@ -129,9 +151,11 @@ class LLMJudgeEvaluator:
             "transport_hash": getattr(self.provider, "transport_hash", None),
             "transport_config": judge_config.canonical_dict() if judge_config is not None else None,
             "routing_immutable": getattr(self.provider, "routing_immutable", None),
-            "prompt_version": JUDGE_PROMPT_VERSION,
-            "prompt_sha256": JUDGE_PROMPT_SHA256,
-            "schema_version": JUDGE_SCHEMA_VERSION,
+            "prompt_version": self._prompt_version,
+            "prompt_sha256": self._prompt_sha256,
+            "schema_version": self._schema_version,
+            "transport_prompt_version": self._transport_prompt_version,
+            "transport_prompt_sha256": self._transport_prompt_sha256,
             "output_mode": self.provider.output_mode,
             "sampling": {
                 "temperature": self.sampling.temperature,
@@ -148,17 +172,17 @@ class LLMJudgeEvaluator:
         response: str,
         example_id: str = "",
     ) -> tuple[JudgeEvaluationTrace, str | None]:
-        prompt = render_judge_prompt(context, response)
+        prompt = self._prompt_renderer(context, response)
         call = self.provider.judge(
             prompt,
-            schema=JUDGE_OUTPUT_SCHEMA,
+            schema=self._output_schema,
             config=self.sampling,
         )
         parse_result: JudgeParseResult | None = None
         if call.api_success and call.assistant_content:
-            parse_result = parse_judge_payload(call.assistant_content)
+            parse_result = self._parser(call.assistant_content)
         prediction: HallucinationPrediction | None = None
-        decision: JudgeDecision | None = None
+        decision: JudgeDecision | JudgeClassificationDecision | None = None
         error_class = call.error_class
         safe_error_summary = call.safe_error_summary
         structured_status = (
@@ -175,6 +199,7 @@ class LLMJudgeEvaluator:
                     decision,
                     example_id=example_id,
                     evaluator_config=self.config,
+                    evaluator_version=self._evaluator_version,
                 )
             else:
                 error_class = parse_result.error_class

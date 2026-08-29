@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from evalops.evaluators.judge.evaluator import LLMJudgeEvaluator
-from evalops.evaluators.judge.models import JudgeLabel
+from evalops.evaluators.judge.models import JudgeLabel, parse_classification_judge_payload
+from evalops.evaluators.judge.prompt import (
+    CLASSIFICATION_OUTPUT_SCHEMA,
+    CLASSIFICATION_SCHEMA_VERSION,
+    JUDGE_PROMPT_SHA256,
+    JUDGE_PROMPT_VERSION,
+    render_classification_judge_prompt,
+)
 from evalops.evaluators.judge.providers import (
     GeminiProviderAdapter,
     GroqProviderAdapter,
@@ -66,6 +73,41 @@ def test_gemini_response_maps_to_grounded_prediction() -> None:
     assert trace.model_version == "gemini-2.5-flash-lite"
     assert trace.response_id == "response-1"
     assert trace.observed_at is not None
+
+
+def test_classification_evaluator_keeps_primary_decision_free_of_evidence_metadata() -> None:
+    adapter = GeminiProviderAdapter(
+        "secret-not-persisted",
+        transport=FixedTransport(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": '{"label":"GROUNDED","confidence":0.8}'}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "modelVersion": "gemini-2.5-flash-lite",
+            }
+        ),
+    )
+    evaluator = LLMJudgeEvaluator(
+        adapter,
+        prompt_renderer=render_classification_judge_prompt,
+        output_schema=CLASSIFICATION_OUTPUT_SCHEMA,
+        prompt_version=JUDGE_PROMPT_VERSION,
+        prompt_sha256=JUDGE_PROMPT_SHA256,
+        schema_version=CLASSIFICATION_SCHEMA_VERSION,
+        parser=parse_classification_judge_payload,
+        evaluator_version=CLASSIFICATION_SCHEMA_VERSION,
+    )
+
+    trace = evaluator.evaluate_with_trace("The source says seven.", "The answer says seven.", "r1")
+
+    assert trace.prediction is not None
+    assert trace.decision is not None
+    assert trace.decision.model_dump() == {"label": "GROUNDED", "confidence": 0.8}
+    assert trace.prediction.evaluator_version == CLASSIFICATION_SCHEMA_VERSION
+    assert evaluator.config["schema_version"] == CLASSIFICATION_SCHEMA_VERSION
 
 
 def test_groq_response_maps_to_hallucinated_prediction_and_ignores_reasoning() -> None:

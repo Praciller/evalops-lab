@@ -4,8 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from evalops.evaluators.judge.models import (
+    JudgeClassificationDecision,
     JudgeDecision,
     JudgeLabel,
+    parse_classification_judge_payload,
     parse_judge_payload,
 )
 
@@ -85,3 +87,28 @@ def test_parse_judge_payload_accepts_valid_json() -> None:
     assert parsed.success is True
     assert parsed.decision is not None
     assert parsed.decision.label is JudgeLabel.GROUNDED
+
+
+def test_classification_contract_excludes_evidence_fields() -> None:
+    decision = JudgeClassificationDecision(label=JudgeLabel.GROUNDED, confidence=0.7)
+
+    assert decision.model_dump() == {"label": JudgeLabel.GROUNDED, "confidence": 0.7}
+    with pytest.raises(ValidationError):
+        JudgeClassificationDecision(
+            label=JudgeLabel.GROUNDED,
+            confidence=0.7,
+            reason="must not be part of primary output",
+        )
+
+
+def test_parse_classification_payload_accepts_only_primary_fields() -> None:
+    parsed = parse_classification_judge_payload('{"label":"HALLUCINATED","confidence":0.9}')
+    rejected = parse_classification_judge_payload(
+        '{"label":"HALLUCINATED","confidence":0.9,"reason":"extra"}'
+    )
+
+    assert parsed.success is True
+    assert parsed.decision is not None
+    assert parsed.decision.label is JudgeLabel.HALLUCINATED
+    assert rejected.success is False
+    assert rejected.error_class == "SCHEMA_VALIDATION_ERROR"
