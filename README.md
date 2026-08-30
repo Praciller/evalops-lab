@@ -31,7 +31,9 @@ Dataset → validation → evaluation runner → metric evaluators
 The first runnable path is retrieval evaluation. Generation remains a typed
 interface for future adapters. The bounded Phase 5A LLM-as-a-Judge path is
 opt-in and does not replace human ground truth or existing deterministic/HHEM
-results.
+results. The owner-authorized Phase 5B-L local full benchmark is recorded as a
+separate protocol-specific baseline; it does not authorize a new Gemini run or
+another model experiment.
 
 ## Implemented
 
@@ -60,8 +62,9 @@ EvalOps Lab keeps the evidence chain separate:
 4. Failure analysis and regression comparison turn scores into engineering evidence.
 
 Human labels remain distinct from model-generated judge outputs. Phase 5A is a
-bounded evaluator-validation framework; it does not claim full-population
-RAGTruth performance.
+bounded evaluator-validation framework, and the completed Phase 5B-L result
+reports full-population RAGTruth performance only for its frozen local
+protocol.
 
 ## Initial datasets
 
@@ -75,9 +78,10 @@ Dataset metadata and rules are in [`datasets/README.md`](datasets/README.md) and
 Verified results are consolidated in [`docs/benchmark-results.md`](docs/benchmark-results.md).
 The reproducible command flow is in [`docs/reproducibility.md`](docs/reproducibility.md),
 and HHEM provenance/security details are in [`docs/hhem-evaluator.md`](docs/hhem-evaluator.md).
-The isolated local Ollama/Qwen3 Phase 5A-L experiment is documented in
-[`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md); it does not mix with the
-partial Gemini pilot or authorize Phase 5B.
+The isolated local Ollama/Qwen3 Phase 5A-L and completed Phase 5B-L
+experiments are documented in [`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md);
+they remain separate from the partial Gemini pilot and do not authorize a new
+Gemini/model experiment.
 
 ## RAGTruth hallucination benchmark
 
@@ -207,17 +211,21 @@ GitHub Actions runs the same lint, format, type, and test gates on pushes and pu
 
 ## Roadmap
 
-- Phase 5B: owner-reviewed full-population LLM-as-a-Judge validation after the Phase 5A pilot.
-- Phase 6: three-way evaluator analysis: heuristic, HHEM, and LLM judge.
-- Phase 7: expand the curated Thai evaluation benchmark.
-- Phase 8: code-generation and code-migration evaluator adapters.
+- Phase 5B-L: completed owner-authorized full-population local LLM-as-a-Judge
+  benchmark; HHEM remains the default detector and Qwen3 local is
+  complementary.
+- Future: publish the frozen benchmark baseline and evidence.
+- Future: expand the curated Thai evaluation benchmark.
+- Future: add code-generation and code-migration evaluator adapters.
 
 ## Limitations
 
 The full MIRACL Thai dev BM25 run is not executed because the current
 in-memory index resource requirements were not safely established. HHEM CPU
 inference is slow, observed inputs reached approximately 2,723 tokens without
-adapter truncation, and threshold calibration/bootstrap intervals remain
-future work. The MIRACL and RAGTruth mini fixtures are synthetic and must not
-be presented as official benchmark performance. The five `thai-rag-eval-200`
-records are a seed fixture, not a 200-case benchmark.
+adapter truncation, and HHEM-only threshold calibration/bootstrap intervals
+remain future work. The completed local RAGTruth result is protocol-specific
+and is not a leaderboard or universal generalization claim. The MIRACL and
+RAGTruth mini fixtures are synthetic and must not be presented as official
+benchmark performance. The five `thai-rag-eval-200` records are a seed
+fixture, not a 200-case benchmark.

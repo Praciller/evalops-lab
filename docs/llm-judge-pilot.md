@@ -170,7 +170,8 @@ truth for the remaining IDs. The first five historical
 successful traces have `modelVersion` unavailable, while resumed successful
 traces consistently report `gemini-2.5-flash-lite`; continuity is therefore
 `UNVERIFIED`, not asserted as a pass. No historical success was overwritten, no
-other provider was tried, and Phase 5B remains unauthorized.
+other provider was tried, and Phase 5B remained unauthorized at that
+historical point.
 
 The second resume on 2026-08-27 performed a fresh health check successfully,
 then received explicit `RPD` exhaustion on the first pending ID (`10713`). It
@@ -186,7 +187,7 @@ no new valid prediction was added, the session used 1 request against its
 112-request ceiling, and the cumulative lifetime ledger is 330 with 18 valid
 predictions and 102 IDs still pending. The report marks this as
 `PARTIAL_NON_DECISION_VALID`; no completion-result commit, consistency call, or
-Phase 5B decision was made.
+Phase 5B decision was made at that historical point.
 
 ## Comparisons and decision boundary
 
@@ -198,11 +199,13 @@ correctness categories. Human labels remain authoritative; no majority vote is
 used. The report sets `multi_provider_ready=false` for this scope and does not
 invent a secondary-provider comparison.
 
-A strong pilot result does not authorize the full 2,675-example evaluation.
-Phase 5A ends with a documented `PHASE5B_RECOMMENDED_JUDGE` and owner review.
-The full RAGTruth run is a separate Phase 5B decision. The single-provider
-pilot recommendation is therefore a validation input, not authorization for a
-full Gemini run.
+A strong pilot result does not self-authorize the full 2,675-example
+evaluation. Phase 5A ends with a documented recommendation and owner review.
+The full RAGTruth run is a separate Phase 5B decision. Owner authorization was
+later granted only for the existing local Phase 5A-L V3 configuration; it did
+not authorize resuming Gemini, hosted inference, or changing the model or
+contract. The completed local result is recorded in
+[`benchmark-results.md`](benchmark-results.md).
 
 ## Phase 5A-L: isolated local open-weight judge
 
@@ -250,6 +253,26 @@ exploratory intersection over its 23 successful IDs only.
 The separate consistency run samples 12 existing IDs with seed `20260826`
 and performs two additional evaluations per ID (24 repeats). It measures
 stability only; it never votes into the primary prediction. A complete local
-pilot and consistency result still requires owner authorization before any
-full 2,675-example Phase 5B-L run. This repository does not start that run
-automatically.
+pilot and consistency result required owner authorization before the full run.
+That authorization was recorded, and the completed Phase 5B-L run used the
+existing V3 classification-first contract over all 2,675 included examples. It
+completed with 2,675/2,675 valid successes, zero pending IDs, exact target-ID
+match, zero hosted requests, and no technical failures. The run report and
+state remain ignored local artifacts; this repository does not start another
+experiment automatically.
+
+## Phase 5B-L: authorized full local evaluation
+
+The authorized experiment was `ragtruth-local-llm-judge-full-v1`. It used the
+official RAGTruth TEST/good population (2,675 included, 25 excluded), the
+same strict-groundedness semantic prompt and V3 classification schema, and
+the exact pinned Ollama `qwen3:8b` model. The run was sequential and
+resumable, persisted every successful result atomically, and never stored
+source text, response text, raw provider bodies, or reasoning.
+
+The final report records local Accuracy `0.7436`, Precision `0.8408`, Recall
+`0.3362`, F1 `0.4803`, Balanced Accuracy `0.6508`, Specificity `0.9654`, FPR
+`0.0346`, and FNR `0.6638`. Local-vs-HHEM and local-vs-heuristic exact paired
+comparisons, deterministic bootstrap intervals, calibration, task/source/
+length slices, error analysis, and performance details are summarized in
+[`benchmark-results.md`](benchmark-results.md).
