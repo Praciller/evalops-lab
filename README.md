@@ -4,6 +4,16 @@ AI reliability testing and evaluation framework for RAG systems, LLM outputs, an
 
 EvalOps Lab treats AI evaluation as a software and data quality problem rather than relying on a single model-generated score.
 
+## Recruiter snapshot
+
+**Signal:** Reproducible AI evaluation for retrieval, groundedness, failure taxonomy, and regression decisions.
+
+[Repository](https://github.com/Praciller/evalops-lab)
+
+**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation.
+
+**Boundary:** this is a local evaluation framework with no hosted demo or model-superiority claim.
+
 ## Problem
 
 An answer can look fluent while being wrong, unsupported by retrieved context, stale, incomplete, or unsafe to change. A score without ground truth, provenance, and failure evidence does not provide a reliable engineering signal.
