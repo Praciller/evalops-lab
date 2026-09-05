@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "node scripts/build-pages.mjs",
     "start:static": "http-server out -p 4173 -c-1",
+    "start:pages": "node scripts/serve-pages.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:pages": "node scripts/test-pages-e2e.mjs"
   },
   "dependencies": {
     "next": "16.3.4",

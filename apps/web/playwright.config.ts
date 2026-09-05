@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const pagesMode = process.env.PAGES_MODE === "true";
+const appBasePath = pagesMode ? "/evalops-lab" : "";
+const localPort = pagesMode ? 4174 : 4173;
+const localBaseURL = `http://127.0.0.1:${localPort}${appBasePath}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -8,7 +13,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: `${localBaseURL}/`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -17,8 +22,8 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "npm run start:static",
-    url: "http://127.0.0.1:4173",
+    command: pagesMode ? "npm run start:pages" : "npm run start:static",
+    url: `${localBaseURL}/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
