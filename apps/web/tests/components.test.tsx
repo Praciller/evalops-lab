@@ -3,17 +3,35 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { Overview } from "@/components/overview";
+import { ComparisonDetail } from "@/components/comparison-detail";
 import { RunDetail } from "@/components/run-detail";
 import { ArtifactBadges } from "@/components/status-badges";
-import { getRunArtifact } from "@/lib/evidence/repository";
+import { getComparisonBundle, getRunArtifact } from "@/lib/evidence/repository";
 
 describe("Evidence Console components", () => {
   it("renders overview identity, catalog summary, and safe run links", () => {
     render(<Overview />);
     expect(screen.getByRole("heading", { name: "Evidence Console" })).toBeInTheDocument();
     expect(screen.getByText("Explicit index membership")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /demo-retrieval-fixture-v1/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Regression evidence" })).toBeInTheDocument();
+    expect(screen.getAllByText("SYNTHETIC_FIXTURE", { exact: false })).toHaveLength(4);
+  });
+
+  it("renders comparison verdict, operand links, and metric statuses", () => {
+    render(<ComparisonDetail bundle={getComparisonBundle("demo-retrieval-regression-v1")} />);
+    expect(screen.getByRole("heading", { name: "Regression detected" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /demo-retrieval-reference-v1/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /demo-retrieval-fixture-v1/ })).toBeInTheDocument();
-    expect(screen.getAllByText("SYNTHETIC_FIXTURE", { exact: false })).toHaveLength(2);
+    expect(screen.getByText(/Population compatibility: MATCHED/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/REGRESSION/)).toHaveLength(4);
+  });
+
+  it("adds a bounded regression evidence section to the overview", () => {
+    render(<Overview />);
+    expect(screen.getByRole("heading", { name: "Regression evidence" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /demo-retrieval-regression-v1/ })).toBeInTheDocument();
+    expect(screen.getByText(/Synthetic same-population regression demonstration/i)).toBeInTheDocument();
   });
 
   it("renders all three claim dimensions as text badges", () => {

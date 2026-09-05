@@ -1,7 +1,11 @@
 import { Badge } from "@/components/ui/badge";
-import type { PublicRunArtifact, PublicArtifactSummary } from "@/lib/evidence/schemas";
+import type {
+  PublicArtifactSummary,
+  PublicComparisonArtifact,
+  PublicRunArtifact,
+} from "@/lib/evidence/schemas";
 
-type ClaimArtifact = PublicRunArtifact | PublicArtifactSummary;
+type ClaimArtifact = PublicRunArtifact | PublicComparisonArtifact | PublicArtifactSummary;
 
 const verificationStyles: Record<ClaimArtifact["verification_status"], string> = {
   VERIFIED: "badge-verified",
