@@ -8,11 +8,11 @@ EvalOps Lab treats AI evaluation as a software and data quality problem rather t
 
 **Signal:** Reproducible AI evaluation for retrieval, groundedness, failure taxonomy, and regression decisions.
 
-[Repository](https://github.com/Praciller/evalops-lab)
+[Repository](https://github.com/Praciller/evalops-lab) · [Live Evidence Console](https://praciller.github.io/evalops-lab/)
 
 **What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation.
 
-**Boundary:** this is a local evaluation framework with no hosted demo or model-superiority claim.
+**Boundary:** the hosted Evidence Console is static/read-only and currently exposes only synthetic integration evidence; it does not run evaluators or support model-superiority claims.
 
 ## Problem
 
@@ -47,7 +47,7 @@ another model experiment.
 
 ### Public Evidence Dashboard boundary
 
-The future public dashboard is a static, read-only presentation of explicitly
+The public Evidence Console at [https://praciller.github.io/evalops-lab/](https://praciller.github.io/evalops-lab/) is a static, read-only presentation of explicitly
 approved, sanitized JSON artifacts. The Python evaluation core remains the
 source of truth; the public path does not run evaluation, call model providers,
 download external data, or expose raw result details. Phase 1 defines the
