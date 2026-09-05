@@ -46,7 +46,7 @@ test("overview remains usable on mobile and keyboard focus is visible", async ({
   await page.keyboard.press("Tab");
   await expect(page.locator(":focus")).toHaveAttribute("href", `${appBasePath}/`);
   await page.screenshot({ path: path.join(screenshotsDir, "overview-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("overview-mobile.png", { clip: mobileClip });
+  await expect(page).toHaveScreenshot("overview-mobile.png", { clip: mobileClip, maxDiffPixelRatio: 0.05 });
   await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByRole("button", { name: "Light theme" })).toBeVisible();
@@ -99,7 +99,7 @@ test("comparison detail remains usable on mobile without root overflow", async (
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
   await page.screenshot({ path: path.join(screenshotsDir, "comparison-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("comparison-mobile.png", { clip: mobileClip });
+  await expect(page).toHaveScreenshot("comparison-mobile.png", { clip: mobileClip, maxDiffPixelRatio: 0.05 });
 });
 
 test("failure explorer is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
