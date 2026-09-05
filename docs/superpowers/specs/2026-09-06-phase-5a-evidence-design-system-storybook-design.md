@@ -2,7 +2,7 @@
 
 Date: 2026-09-06
 Repository: `Praciller/evalops-lab`
-Status: Conversational design approved; canonical specification pending owner review
+Status: Approved canonical design; implementation planning authorized
 
 ## 1. Goal
 
