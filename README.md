@@ -51,8 +51,25 @@ The future public dashboard is a static, read-only presentation of explicitly
 approved, sanitized JSON artifacts. The Python evaluation core remains the
 source of truth; the public path does not run evaluation, call model providers,
 download external data, or expose raw result details. Phase 1 defines the
-versioned Public Evidence Contract and exporters; frontend implementation and
-deployment remain future work.
+versioned Public Evidence Contract and exporters. Phase 2 adds the local static
+Evidence Console at `apps/web`: it reads only the checked-in explicit index at
+`apps/web/public/evidence/index.json` and its two synthetic demo run artifacts.
+It has no runtime API, inference, provider credentials, external data download,
+or public write path. Build and test it with:
+
+```bash
+cd apps/web
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+```
+
+The demo artifacts are regenerated explicitly with
+`python scripts/generate_public_demo_evidence.py`. The Thai MIRACL-shaped mini
+fixture is synthetic integration evidence, not an official benchmark result.
 
 ## Implemented
 
