@@ -11,6 +11,7 @@ const preview: Preview = {
     viewport: {
       viewports: {
         mobile: { name: "Mobile", styles: { height: "844px", width: "390px" } },
+        tablet: { name: "Tablet", styles: { height: "1024px", width: "768px" } },
         desktop: { name: "Desktop", styles: { height: "900px", width: "1440px" } },
       },
     },

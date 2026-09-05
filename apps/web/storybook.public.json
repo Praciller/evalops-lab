@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "titles": [
+    "Foundations/Canvas",
+    "Primitives/Button",
+    "Primitives/Badge",
+    "Primitives/Card",
+    "Primitives/Table",
+    "Evidence/Claim Badges",
+    "Evidence/Population Compatibility",
+    "Evidence/Regression",
+    "Evidence/Empty States",
+    "Comparison/Metric Delta",
+    "Patterns/Metric Stat",
+    "Patterns/Provenance"
+  ]
+}
