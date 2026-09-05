@@ -39,6 +39,19 @@ The checked-in public evidence remains guarded by the Python test that requires 
 
 The deployment job reported success and GitHub returned the canonical environment URL above. Production smoke verification confirmed HTTP 200 for the Overview and both generated run-detail routes, visible `SYNTHETIC_FIXTURE` / `INTEGRATION_ONLY` labels, zero serious/critical axe violations on checked routes, working dark-theme toggle, and no unexpected external requests.
 
+## Phase 4 verified deployment
+
+- **Deployed commit:** `8ac61656b27e827a9d1008631e6067f92f5f857e`
+- **EvalOps CI:** `33981831150` — success
+- **Web Evidence Console CI:** `33981831135` — success
+- **GitHub Pages:** `33981831167` — success
+- **Comparison:** https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/
+- **Failure Explorer:** https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/
+
+Production browser verification covered the Overview, comparison, Failure Explorer, reference run, and candidate run. All five routes returned HTTP 200. The comparison rendered `MATCHED`, four aggregate `REGRESSION` rows and one `PASS`, and the evidence-correct two-record change summary. The Failure Explorer kept `THQA-002` as `Persistent category` but excluded it from changed-only results; `THQA-004` remained an introduced failure and `THQA-005` a stable pass with metric deltas. Checked comparison/explorer routes had zero axe violations, dark theme worked, 390 px pages had no root horizontal overflow while wide tables scrolled internally, and no unexpected external requests or HTTP >=400 responses were observed.
+
+This remains `SYNTHETIC_FIXTURE` + `INTEGRATION_ONLY` evidence. It is not an official benchmark result or model-superiority claim.
+
 ## Redeploy
 
 An eligible change pushed to `main` triggers `.github/workflows/pages.yml`. The workflow can also be started with `workflow_dispatch`.
