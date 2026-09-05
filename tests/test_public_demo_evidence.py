@@ -27,11 +27,7 @@ def test_public_demo_evidence_generation_is_deterministic(tmp_path: Path) -> Non
 
     first_files = sorted(path.relative_to(first) for path in first.rglob("*.json"))
     second_files = sorted(path.relative_to(second) for path in second.rglob("*.json"))
-    assert (
-        first_files
-        == second_files
-        == EXPECTED_FILES
-    )
+    assert first_files == second_files == EXPECTED_FILES
     assert [path.read_bytes() for path in (first / file for file in first_files)] == [
         path.read_bytes() for path in (second / file for file in second_files)
     ]
@@ -54,9 +50,7 @@ def test_generated_comparison_uses_expected_policy(tmp_path: Path) -> None:
     generated = tmp_path / "generated"
     generate(generated)
     comparison = json.loads(
-        (generated / "artifacts" / "demo-retrieval-regression-v1.json").read_text(
-            encoding="utf-8"
-        )
+        (generated / "artifacts" / "demo-retrieval-regression-v1.json").read_text(encoding="utf-8")
     )
     statuses = {item["metric_name"]: item["status"] for item in comparison["comparisons"]}
 

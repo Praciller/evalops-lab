@@ -317,23 +317,18 @@ def test_population_compatibility_is_typed_and_same_population_matches() -> None
     baseline = _artifact(artifact_id="baseline-run-v1", run_id="baseline-v1")
     candidate = _artifact(artifact_id="candidate-run-v1")
 
-    assert (
-        assess_population_compatibility(baseline, candidate)
-        is PopulationCompatibility.MATCHED
-    )
+    assert assess_population_compatibility(baseline, candidate) is PopulationCompatibility.MATCHED
 
 
 def test_population_mismatch_is_incompatible() -> None:
     baseline = _artifact(artifact_id="baseline-run-v1", run_id="baseline-v1")
     candidate = _artifact(
-        _run_payload()
-        | {"run": _run_payload()["run"] | {"dataset_version": "synthetic-v2"}},
+        _run_payload() | {"run": _run_payload()["run"] | {"dataset_version": "synthetic-v2"}},
         artifact_id="candidate-run-v1",
     )
 
     assert (
-        assess_population_compatibility(baseline, candidate)
-        is PopulationCompatibility.INCOMPATIBLE
+        assess_population_compatibility(baseline, candidate) is PopulationCompatibility.INCOMPATIBLE
     )
 
 

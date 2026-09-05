@@ -62,9 +62,7 @@ def _retrieval_result(*, predictions_file: str, run_id: str, system_name: str) -
     ground_truth_rows = _read_jsonl(
         REPOSITORY_ROOT / "datasets" / "fixtures" / "retrieval-ground-truth.jsonl"
     )
-    prediction_rows = _read_jsonl(
-        REPOSITORY_ROOT / "datasets" / "fixtures" / predictions_file
-    )
+    prediction_rows = _read_jsonl(REPOSITORY_ROOT / "datasets" / "fixtures" / predictions_file)
     ground_truth = {row["query_id"]: row["relevant_document_ids"] for row in ground_truth_rows}
     predictions = {row["query_id"]: row["retrieved_document_ids"] for row in prediction_rows}
     result = run_retrieval_evaluation(

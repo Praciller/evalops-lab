@@ -320,8 +320,12 @@ def build_public_index(artifacts: Sequence[PublicArtifact]) -> PublicEvidenceInd
                 raise ValueError(
                     "comparison references must reference a run artifact in the same index"
                 )
-        baseline = artifact_by_id[artifact.baseline_artifact_id]
-        candidate = artifact_by_id[artifact.candidate_artifact_id]
+        baseline = artifact_by_id.get(artifact.baseline_artifact_id)
+        candidate = artifact_by_id.get(artifact.candidate_artifact_id)
+        if not isinstance(baseline, PublicRunArtifactV1) or not isinstance(
+            candidate, PublicRunArtifactV1
+        ):
+            raise ValueError("comparison references must reference run artifacts")
         validate_comparison_operands(artifact, baseline, candidate)
     return PublicEvidenceIndexV1(
         artifact_id="public-evidence-index-v1",
