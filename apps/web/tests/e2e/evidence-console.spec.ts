@@ -55,3 +55,84 @@ test("overview links to a static run detail with accessible evidence", async ({ 
   await page.screenshot({ path: path.join(screenshotsDir, "run-detail-desktop.png"), fullPage: true });
   await expect(page).toHaveScreenshot("run-detail-desktop.png", { clip: desktopClip });
 });
+
+test("comparison detail is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  await page.goto(`${appBasePath}/comparisons/demo-retrieval-regression-v1/`);
+  await expect(page.getByRole("heading", { name: "Regression detected" })).toBeVisible();
+  await expect(page.getByText("Population compatibility: MATCHED", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Explore record changes" })).toBeVisible();
+  expect(requests.every((url) => url.startsWith(`http://127.0.0.1:${localPort}${appBasePath}/`) || url.startsWith("data:"))).toBe(true);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+  await page.screenshot({ path: path.join(screenshotsDir, "comparison-desktop.png"), fullPage: true });
+  await expect(page).toHaveScreenshot("comparison-desktop.png", { clip: desktopClip });
+});
+
+test("comparison detail remains usable on mobile without root overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appBasePath}/comparisons/demo-retrieval-regression-v1/`);
+  await expect(page.getByRole("heading", { name: "Regression detected" })).toBeVisible();
+  const rootWidth = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(rootWidth.scrollWidth).toBeLessThanOrEqual(rootWidth.clientWidth);
+  await page.evaluate(() => window.scrollTo(999, 0));
+  expect(await page.evaluate(() => window.scrollX)).toBe(0);
+  expect(await page.locator(".table-scroll").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+  await page.screenshot({ path: path.join(screenshotsDir, "comparison-mobile.png"), fullPage: true });
+  await expect(page).toHaveScreenshot("comparison-mobile.png", { clip: mobileClip });
+});
+
+test("failure explorer is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  await page.goto(`${appBasePath}/comparisons/demo-retrieval-regression-v1/failures/`);
+  await expect(page.getByRole("heading", { name: "Record change explorer" })).toBeVisible();
+  await expect(page.getByText("Reference → Candidate · 5 matched records", { exact: true })).toBeVisible();
+  await expect(page.getByText("Introduced failure", { exact: true }).last()).toBeVisible();
+  expect(requests.every((url) => url.startsWith(`http://127.0.0.1:${localPort}${appBasePath}/`) || url.startsWith("data:"))).toBe(true);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+  await page.screenshot({ path: path.join(screenshotsDir, "failure-explorer-desktop.png"), fullPage: true });
+  await expect(page).toHaveScreenshot("failure-explorer-desktop.png", { clip: desktopClip });
+});
+
+test("failure explorer supports changed-only filtering and mobile internal table scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appBasePath}/comparisons/demo-retrieval-regression-v1/failures/`);
+  await expect(page.getByRole("heading", { name: "Record change explorer" })).toBeVisible();
+  await page.getByRole("checkbox", { name: "Changed records only" }).check();
+  await expect(page.getByRole("cell", { name: "Introduced failure" })).toBeVisible();
+  await expect(page.locator(".data-table tbody tr").filter({ hasText: "THQA-001" })).toHaveCount(0);
+  await expect(page.locator(".data-table tbody tr").filter({ hasText: "THQA-005" })).toContainText("Stable pass");
+  const rootWidth = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(rootWidth.scrollWidth).toBeLessThanOrEqual(rootWidth.clientWidth);
+  await page.evaluate(() => window.scrollTo(999, 0));
+  expect(await page.evaluate(() => window.scrollX)).toBe(0);
+  expect(await page.locator(".table-scroll").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+  await page.screenshot({ path: path.join(screenshotsDir, "failure-explorer-mobile.png"), fullPage: true });
+  await expect(page).toHaveScreenshot("failure-explorer-mobile.png", { clip: mobileClip });
+});
+
+test("comparison journey stays inside static evidence routes", async ({ page }) => {
+  await page.goto(homePath);
+  await page.getByRole("link", { name: "demo-retrieval-regression-v1" }).click();
+  await expect(page).toHaveURL(/\/comparisons\/demo-retrieval-regression-v1\/$/);
+  await page.getByRole("link", { name: "Explore record changes" }).click();
+  await expect(page).toHaveURL(/\/comparisons\/demo-retrieval-regression-v1\/failures\/$/);
+  await page.getByRole("link", { name: /Reference: demo-retrieval-reference-v1/ }).click();
+  await expect(page).toHaveURL(/\/runs\/demo-retrieval-reference-v1\/$/);
+  await page.goto(`${appBasePath}/comparisons/demo-retrieval-regression-v1/`);
+  await page.getByRole("link", { name: "demo-retrieval-fixture-v1" }).click();
+  await expect(page).toHaveURL(/\/runs\/demo-retrieval-fixture-v1\/$/);
+});

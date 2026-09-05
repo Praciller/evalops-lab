@@ -77,7 +77,7 @@ export function ComparisonDetail({ bundle }: { bundle: ComparisonBundle }) {
             <div><p className="eyebrow">Aggregate policy result</p><CardTitle id="metric-comparison-title">Metric comparison</CardTitle></div>
             <span className="text-xs text-muted">{regressionCount} regression · {passCount} pass</span>
           </CardHeader>
-          <div className="table-scroll">
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Metric comparison table">
             <table className="data-table min-w-[760px]">
               <caption className="sr-only">Reference and candidate metric comparison</caption>
               <thead><tr><th scope="col">Metric</th><th scope="col">Reference</th><th scope="col">Candidate</th><th scope="col">Delta</th><th scope="col">Direction</th><th scope="col">Result</th></tr></thead>

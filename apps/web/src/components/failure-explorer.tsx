@@ -87,7 +87,7 @@ function AvailableExplorer({ bundle, rows }: { bundle: ComparisonBundle; rows: F
         </Card>
 
         <Card className="p-5">
-          <div className="table-scroll">
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Record change table">
             <table className="data-table min-w-[960px]">
               <caption className="sr-only">Record-level reference and candidate changes</caption>
               <thead><tr><th scope="col">Record ID</th><th scope="col">Transition</th><th scope="col">Reference category</th><th scope="col">Candidate category</th><th scope="col">Changed metrics</th><th scope="col">Evidence</th></tr></thead>
