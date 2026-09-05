@@ -45,6 +45,15 @@ results. The owner-authorized Phase 5B-L local full benchmark is recorded as a
 separate protocol-specific baseline; it does not authorize a new Gemini run or
 another model experiment.
 
+### Public Evidence Dashboard boundary
+
+The future public dashboard is a static, read-only presentation of explicitly
+approved, sanitized JSON artifacts. The Python evaluation core remains the
+source of truth; the public path does not run evaluation, call model providers,
+download external data, or expose raw result details. Phase 1 defines the
+versioned Public Evidence Contract and exporters; frontend implementation and
+deployment remain future work.
+
 ## Implemented
 
 - Pydantic schemas for curated RAG cases, retrieval inputs, run metadata, and results.

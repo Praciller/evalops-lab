@@ -10,6 +10,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from evalops.benchmarks.miracl import run_miracl_benchmark, write_trec_run
 from evalops.benchmarks.ragtruth import run_ragtruth_benchmark
 from evalops.datasets.io import load_retrieval_ground_truth, load_retrieval_predictions
@@ -29,6 +31,17 @@ from evalops.evaluators.hallucination.hhem import (
     load_hhem_score_model,
 )
 from evalops.evaluators.hallucination.interface import HallucinationEvaluator
+from evalops.export import (
+    ClaimScope,
+    DataKind,
+    PublicArtifact,
+    VerificationStatus,
+    adapt_evaluation_result,
+    adapt_regression_report,
+    build_public_index,
+    load_public_artifact,
+    serialize_public_artifact,
+)
 from evalops.models.hallucination import AnnotationPolicy
 from evalops.models.runs import RunConfig
 from evalops.regression.comparison import MetricRule, compare_metrics
@@ -175,6 +188,38 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--candidate", required=True, type=Path)
     compare.add_argument("--policy", required=True, type=Path)
     compare.add_argument("--output", type=Path)
+
+    evidence = commands.add_parser(
+        "evidence", help="Transform approved evaluation outputs into public artifacts."
+    )
+    evidence_commands = evidence.add_subparsers(dest="evidence_command", required=True)
+    evidence_export = evidence_commands.add_parser(
+        "export", help="Export one explicit run or regression source as public JSON."
+    )
+    evidence_export.add_argument("--source", required=True, type=Path)
+    evidence_export.add_argument("--source-type", choices=["run", "comparison"], required=True)
+    evidence_export.add_argument("--output", required=True, type=Path)
+    evidence_export.add_argument("--artifact-id", required=True)
+    evidence_export.add_argument(
+        "--verification-status",
+        choices=[status.value for status in VerificationStatus],
+        required=True,
+    )
+    evidence_export.add_argument(
+        "--data-kind", choices=[kind.value for kind in DataKind], required=True
+    )
+    evidence_export.add_argument(
+        "--claim-scope", choices=[scope.value for scope in ClaimScope], required=True
+    )
+    evidence_export.add_argument("--limitation", action="append", default=[])
+    evidence_export.add_argument("--baseline-artifact-id")
+    evidence_export.add_argument("--candidate-artifact-id")
+    evidence_export.add_argument("--population-compatibility")
+    evidence_index = evidence_commands.add_parser(
+        "index", help="Index an explicit list of already-approved public artifacts."
+    )
+    evidence_index.add_argument("--artifact", action="append", required=True, type=Path)
+    evidence_index.add_argument("--output", required=True, type=Path)
     return parser
 
 
@@ -462,6 +507,72 @@ def _regression_compare(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return payload
+
+
+def _write_public_artifact_json(artifact: PublicArtifact, output: Path) -> None:
+    serialized = serialize_public_artifact(artifact)
+    output.write_text(serialized, encoding="utf-8")
+    print(serialized, end="")
+
+
+def _public_export_error(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        return "; ".join(str(detail.get("msg", "validation failed")) for detail in error.errors())
+    return str(error)
+
+
+def _evidence_export(args: argparse.Namespace) -> int:
+    try:
+        source = _read_json(args.source)
+        common = {
+            "artifact_id": args.artifact_id,
+            "verification_status": VerificationStatus(args.verification_status),
+            "data_kind": DataKind(args.data_kind),
+            "claim_scope": ClaimScope(args.claim_scope),
+            "limitations": args.limitation,
+        }
+        artifact: PublicArtifact
+        if args.source_type == "run":
+            artifact = adapt_evaluation_result(source, **common)
+        else:
+            if not args.baseline_artifact_id or not args.candidate_artifact_id:
+                raise ValueError(
+                    "comparison exports require --baseline-artifact-id and --candidate-artifact-id"
+                )
+            artifact = adapt_regression_report(
+                source,
+                baseline_artifact_id=args.baseline_artifact_id,
+                candidate_artifact_id=args.candidate_artifact_id,
+                population_compatibility=args.population_compatibility,
+                **common,
+            )
+        _write_public_artifact_json(artifact, args.output)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print(
+            json.dumps({"error": _public_export_error(error)}, ensure_ascii=False), file=sys.stderr
+        )
+        return 2
+    return 0
+
+
+def _evidence_index(args: argparse.Namespace) -> int:
+    try:
+        artifacts = [load_public_artifact(_read_json(path)) for path in args.artifact]
+        index = build_public_index(artifacts)
+        _write_public_artifact_json(index, args.output)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print(
+            json.dumps({"error": _public_export_error(error)}, ensure_ascii=False), file=sys.stderr
+        )
+        return 2
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process-style exit code."""
 
@@ -483,4 +594,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _hallucination_compare(args)
     if args.command == "regression" and args.regression_command == "compare":
         return _regression_compare(args)
+    if args.command == "evidence" and args.evidence_command == "export":
+        return _evidence_export(args)
+    if args.command == "evidence" and args.evidence_command == "index":
+        return _evidence_index(args)
     raise AssertionError("unhandled CLI command")
