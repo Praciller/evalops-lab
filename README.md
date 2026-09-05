@@ -10,7 +10,9 @@ EvalOps Lab treats AI evaluation as a software and data quality problem rather t
 
 [Repository](https://github.com/Praciller/evalops-lab) · [Live Evidence Console](https://praciller.github.io/evalops-lab/)
 
-**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation.
+**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation · same-population regression comparison · record-level change inspection.
+
+[Comparison demo](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/) · [Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/)
 
 **Boundary:** the hosted Evidence Console is static/read-only and currently exposes only synthetic integration evidence; it does not run evaluators or support model-superiority claims.
 
@@ -52,10 +54,12 @@ approved, sanitized JSON artifacts. The Python evaluation core remains the
 source of truth; the public path does not run evaluation, call model providers,
 download external data, or expose raw result details. Phase 1 defines the
 versioned Public Evidence Contract and exporters. Phase 2 adds the local static
-Evidence Console at `apps/web`: it reads only the checked-in explicit index at
-`apps/web/public/evidence/index.json` and its two synthetic demo run artifacts.
-It has no runtime API, inference, provider credentials, external data download,
-or public write path. Build and test it with:
+Evidence Console at `apps/web`; Phase 4 extends it with an evidence-safe
+comparison view and comparison-scoped Failure Explorer. The console reads only
+the checked-in explicit index at `apps/web/public/evidence/index.json`, which
+currently allowlists three synthetic run artifacts plus one synthetic comparison
+artifact. It has no runtime API, inference, provider credentials, external data
+download, or public write path. Build and test it with:
 
 ```bash
 cd apps/web
