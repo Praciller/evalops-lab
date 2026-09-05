@@ -3,6 +3,8 @@ import AxeBuilder from "@axe-core/playwright";
 import path from "node:path";
 
 const screenshotsDir = path.resolve(process.cwd(), "../../docs/screenshots/evidence-console");
+const desktopClip = { x: 0, y: 0, width: 1280, height: 720 };
+const mobileClip = { x: 0, y: 0, width: 390, height: 844 };
 
 test("overview is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
   const requests: string[] = [];
@@ -15,7 +17,7 @@ test("overview is accessible, local-only, and has a stable desktop visual", asyn
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
   await page.screenshot({ path: path.join(screenshotsDir, "overview-desktop.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("overview-desktop.png", { fullPage: true });
+  await expect(page).toHaveScreenshot("overview-desktop.png", { clip: desktopClip });
 });
 
 test("overview remains usable on mobile and keyboard focus is visible", async ({ page }) => {
@@ -25,7 +27,7 @@ test("overview remains usable on mobile and keyboard focus is visible", async ({
   await page.keyboard.press("Tab");
   await expect(page.locator(":focus")).toHaveAttribute("href", "/");
   await page.screenshot({ path: path.join(screenshotsDir, "overview-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("overview-mobile.png", { fullPage: true });
+  await expect(page).toHaveScreenshot("overview-mobile.png", { clip: mobileClip });
   await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByRole("button", { name: "Light theme" })).toBeVisible();
@@ -40,5 +42,5 @@ test("overview links to a static run detail with accessible evidence", async ({ 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
   await page.screenshot({ path: path.join(screenshotsDir, "run-detail-desktop.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("run-detail-desktop.png", { fullPage: true });
+  await expect(page).toHaveScreenshot("run-detail-desktop.png", { clip: desktopClip });
 });
