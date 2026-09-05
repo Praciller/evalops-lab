@@ -33,6 +33,7 @@ Thumbs.db
 .next/
 out/
 node_modules/
+.worktrees/
 *.tsbuildinfo
 playwright-report/
 test-results/
