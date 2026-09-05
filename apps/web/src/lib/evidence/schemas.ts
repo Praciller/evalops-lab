@@ -52,6 +52,9 @@ const Failure = z
 const VerificationStatus = z.enum(["VERIFIED", "PARTIAL", "UNVERIFIED", "NOT_RUN"]);
 const DataKind = z.enum(["SYNTHETIC_FIXTURE", "CURATED_DATASET", "OFFICIAL_BENCHMARK"]);
 const ClaimScope = z.enum(["INTEGRATION_ONLY", "PROTOCOL_SPECIFIC", "BENCHMARK_RESULT"]);
+const MetricDirection = z.enum(["higher_is_better", "lower_is_better"]);
+const RegressionStatus = z.enum(["PASS", "REGRESSION", "MISSING"]);
+export const PopulationCompatibility = z.enum(["MATCHED", "UNVERIFIED", "INCOMPATIBLE"]);
 
 const ClaimFields = {
   verification_status: VerificationStatus,
@@ -109,6 +112,44 @@ export const PublicRunArtifactSchema = z
   })
   .strict()
   .superRefine(validateClaimDimensions);
+
+const PublicComparisonMetricSchema = z
+  .object({
+    metric_name: SafeIdentifier,
+    direction: MetricDirection,
+    baseline_value: z.number().finite().nullable(),
+    candidate_value: z.number().finite().nullable(),
+    delta: z.number().finite().nullable(),
+    status: RegressionStatus,
+    reason: SafeText,
+  })
+  .strict();
+
+export const PublicComparisonArtifactSchema = z
+  .object({
+    schema_version: z.literal("public-evidence-v1"),
+    artifact_id: SafeIdentifier,
+    artifact_type: z.literal("comparison"),
+    ...ClaimFields,
+    baseline_artifact_id: SafeIdentifier,
+    candidate_artifact_id: SafeIdentifier,
+    baseline_run_id: SafeIdentifier.nullable(),
+    candidate_run_id: SafeIdentifier.nullable(),
+    passed: z.boolean(),
+    comparisons: z.array(PublicComparisonMetricSchema),
+    population_compatibility: PopulationCompatibility,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    validateClaimDimensions(value, ctx);
+    if (value.baseline_artifact_id === value.candidate_artifact_id) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["candidate_artifact_id"],
+        message: "self comparison",
+      });
+    }
+  });
 
 export const PublicArtifactSummarySchema = z
   .object({
@@ -211,10 +252,11 @@ export const PublicEvidenceIndexSchema = z
   .superRefine(validateIndexIntegrity);
 
 export type PublicRunArtifact = z.infer<typeof PublicRunArtifactSchema>;
+export type PublicComparisonArtifact = z.infer<typeof PublicComparisonArtifactSchema>;
 export type PublicArtifactSummary = z.infer<typeof PublicArtifactSummarySchema>;
 export type PublicEvidenceIndex = z.infer<typeof PublicEvidenceIndexSchema>;
 
-export type PublicClaimArtifact = PublicRunArtifact | PublicArtifactSummary;
+export type PublicClaimArtifact = PublicRunArtifact | PublicComparisonArtifact | PublicArtifactSummary;
 
 export class EvidenceContractError extends Error {
   constructor(message = "Evidence unavailable") {
@@ -231,6 +273,12 @@ export function parsePublicEvidenceIndex(value: unknown): PublicEvidenceIndex {
 
 export function parsePublicRunArtifact(value: unknown): PublicRunArtifact {
   const result = PublicRunArtifactSchema.safeParse(value);
+  if (!result.success) throw new EvidenceContractError("Evidence unavailable");
+  return result.data;
+}
+
+export function parsePublicComparisonArtifact(value: unknown): PublicComparisonArtifact {
+  const result = PublicComparisonArtifactSchema.safeParse(value);
   if (!result.success) throw new EvidenceContractError("Evidence unavailable");
   return result.data;
 }
