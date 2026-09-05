@@ -6,12 +6,18 @@ on:
       - "apps/web/**"
       - "docs/screenshots/evidence-console/**"
       - "scripts/generate_public_demo_evidence.py"
+      - "src/evalops/export/**"
+      - "src/evalops/models/runs.py"
+      - "docs/specs/public-evidence-contract-v1.md"
       - ".github/workflows/web-ci.yml"
   pull_request:
     paths:
       - "apps/web/**"
       - "docs/screenshots/evidence-console/**"
       - "scripts/generate_public_demo_evidence.py"
+      - "src/evalops/export/**"
+      - "src/evalops/models/runs.py"
+      - "docs/specs/public-evidence-contract-v1.md"
       - ".github/workflows/web-ci.yml"
 
 permissions:

@@ -12,6 +12,20 @@ import {
 const EVIDENCE_ROOT = path.join(process.cwd(), "public", "evidence");
 const ARTIFACT_ID_FOR_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+function metricsMatch(
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) => key === rightKeys[index] && Object.is(left[key], right[key]),
+    )
+  );
+}
+
 function readApprovedJson(relativePath: "index.json" | `artifacts/${string}.json`): unknown {
   try {
     const absolutePath = path.join(EVIDENCE_ROOT, relativePath);
@@ -42,7 +56,11 @@ export function getRunArtifact(artifactId: string): PublicRunArtifact {
     artifact.artifact_type !== summary.artifact_type ||
     artifact.verification_status !== summary.verification_status ||
     artifact.data_kind !== summary.data_kind ||
-    artifact.claim_scope !== summary.claim_scope
+    artifact.claim_scope !== summary.claim_scope ||
+    artifact.run.run_id !== summary.run_id ||
+    artifact.run.dataset_name !== summary.dataset_name ||
+    artifact.run.evaluation_type !== summary.evaluation_type ||
+    !metricsMatch(artifact.metrics, summary.metrics)
   ) {
     throw new EvidenceContractError("Evidence unavailable");
   }

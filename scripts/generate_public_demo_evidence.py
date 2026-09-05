@@ -79,7 +79,7 @@ def _retrieval_result() -> Any:
 
 def _miracl_result() -> Any:
     fixture_dir = REPOSITORY_ROOT / "datasets" / "fixtures" / "miracl-th-mini"
-    return run_miracl_benchmark(
+    result = run_miracl_benchmark(
         topics_path=fixture_dir / "topics.tsv",
         qrels_path=fixture_dir / "qrels.tsv",
         corpus_paths=[fixture_dir / "corpus.jsonl"],
@@ -100,6 +100,20 @@ def _miracl_result() -> Any:
             timestamp=FIXED_TIMESTAMP,
         ),
     )
+    # BM25 sums equivalent terms in a set iteration order that can vary between
+    # fresh Python processes. Normalize only the public demo's exposed scores;
+    # evaluator outputs and ranking semantics remain unchanged.
+    details = dict(result.details)
+    per_query = details.get("per_query")
+    if isinstance(per_query, dict):
+        details["per_query"] = {
+            query_id: {
+                **record,
+                "scores": [round(float(score), 12) for score in record.get("scores", [])],
+            }
+            for query_id, record in per_query.items()
+        }
+    return result.model_copy(update={"details": details})
 
 
 def generate(output_dir: Path = EVIDENCE_DIR) -> None:
