@@ -3,7 +3,61 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { getApprovedRunArtifacts, getEvidenceIndex, getRunArtifact } from "@/lib/evidence/repository";
+import {
+  getApprovedComparisonBundles,
+  getApprovedRunArtifacts,
+  getComparisonArtifact,
+  getComparisonBundle,
+  getEvidenceIndex,
+  getRunArtifact,
+} from "@/lib/evidence/repository";
+
+function withArtifactMutation(
+  artifactId: string,
+  mutate: (artifact: Record<string, unknown>) => void,
+  assertion: () => void,
+) {
+  const artifactPath = path.join(
+    process.cwd(),
+    "public/evidence/artifacts",
+    `${artifactId}.json`,
+  );
+  const originalReadFileSync = fs.readFileSync;
+  const readFileSyncSpy = vi.spyOn(fs, "readFileSync").mockImplementation((file, options) => {
+    const content = originalReadFileSync(file, options);
+    if (String(file) !== artifactPath || typeof content !== "string") return content;
+    const artifact = JSON.parse(content) as Record<string, unknown>;
+    mutate(artifact);
+    return JSON.stringify(artifact);
+  });
+
+  try {
+    assertion();
+  } finally {
+    readFileSyncSpy.mockRestore();
+  }
+}
+
+function withIndexMutation(
+  mutate: (index: Record<string, unknown>) => void,
+  assertion: () => void,
+) {
+  const indexPath = path.join(process.cwd(), "public/evidence/index.json");
+  const originalReadFileSync = fs.readFileSync;
+  const readFileSyncSpy = vi.spyOn(fs, "readFileSync").mockImplementation((file, options) => {
+    const content = originalReadFileSync(file, options);
+    if (String(file) !== indexPath || typeof content !== "string") return content;
+    const index = JSON.parse(content) as Record<string, unknown>;
+    mutate(index);
+    return JSON.stringify(index);
+  });
+
+  try {
+    assertion();
+  } finally {
+    readFileSyncSpy.mockRestore();
+  }
+}
 
 describe("evidence repository", () => {
   it("loads only artifacts named by the explicit index", () => {
@@ -12,12 +66,83 @@ describe("evidence repository", () => {
     expect(artifacts.map((artifact) => artifact.artifact_id)).toEqual([
       "demo-miracl-th-mini-v1",
       "demo-retrieval-fixture-v1",
+      "demo-retrieval-reference-v1",
     ]);
+  });
+
+  it("loads the matched comparison bundle", () => {
+    const bundle = getComparisonBundle("demo-retrieval-regression-v1");
+    expect(bundle.baseline.artifact_id).toBe("demo-retrieval-reference-v1");
+    expect(bundle.candidate.artifact_id).toBe("demo-retrieval-fixture-v1");
+    expect(bundle.comparison.population_compatibility).toBe("MATCHED");
+    expect(bundle.comparison.data_kind).toBe("SYNTHETIC_FIXTURE");
+    expect(bundle.comparison.claim_scope).toBe("INTEGRATION_ONLY");
+    expect(getApprovedComparisonBundles()).toHaveLength(1);
   });
 
   it("fails closed for unknown or unsafe artifact IDs", () => {
     expect(() => getRunArtifact("missing-artifact")).toThrow("Evidence unavailable");
     expect(() => getRunArtifact("../secrets")).toThrow("Evidence unavailable");
+    expect(() => getComparisonArtifact("missing-comparison")).toThrow("Evidence unavailable");
+    expect(() => getComparisonArtifact("../secrets")).toThrow("Evidence unavailable");
+  });
+
+  it.each([
+    ["missing baseline", (index: Record<string, unknown>) => {
+      const artifacts = index.artifacts as Array<Record<string, unknown>>;
+      artifacts.find((item) => item.artifact_id === "demo-retrieval-regression-v1")!.baseline_artifact_id = null;
+    }],
+    ["missing candidate", (index: Record<string, unknown>) => {
+      const artifacts = index.artifacts as Array<Record<string, unknown>>;
+      artifacts.find((item) => item.artifact_id === "demo-retrieval-regression-v1")!.candidate_artifact_id = null;
+    }],
+  ])("rejects %s comparison summary", (_label, mutate) => {
+    withIndexMutation(mutate, () => {
+      expect(() => getComparisonArtifact("demo-retrieval-regression-v1")).toThrow("Evidence unavailable");
+    });
+  });
+
+  it.each([
+    ["baseline run id", (artifact: Record<string, unknown>) => { artifact.baseline_run_id = "edited-run"; }],
+    ["candidate reference", (artifact: Record<string, unknown>) => { artifact.candidate_artifact_id = "demo-miracl-th-mini-v1"; }],
+    ["candidate run id", (artifact: Record<string, unknown>) => { artifact.candidate_run_id = "edited-run"; }],
+    ["comparison delta", (artifact: Record<string, unknown>) => { (artifact.comparisons as Array<Record<string, unknown>>)[0].delta = 0.123; }],
+    ["population flag", (artifact: Record<string, unknown>) => { artifact.population_compatibility = "UNVERIFIED"; }],
+  ])("rejects comparison %s tampering", (_label, mutate) => {
+    withArtifactMutation("demo-retrieval-regression-v1", mutate, () => {
+      expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable");
+    });
+  });
+
+  it("rejects dangling and comparison-to-comparison references", () => {
+    withArtifactMutation("demo-retrieval-regression-v1", (artifact) => {
+      artifact.baseline_artifact_id = "missing-run";
+    }, () => {
+      expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable");
+    });
+    withArtifactMutation("demo-retrieval-regression-v1", (artifact) => {
+      artifact.baseline_artifact_id = "demo-retrieval-regression-v1";
+    }, () => {
+      expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable");
+    });
+  });
+
+  it.each([
+    ["dataset_name", { dataset_name: "other-fixture" }],
+    ["dataset_version", { dataset_version: "synthetic-v2" }],
+    ["dataset_revision", { dataset_revision: "other-revision" }],
+    ["evaluation_type", { evaluation_type: "other-eval" }],
+    ["top_k", { top_k: 10 }],
+    ["benchmark", { benchmark: "other" }],
+    ["language", { language: "th" }],
+    ["split", { split: "test" }],
+    ["evaluator_versions", { evaluator_versions: { retrieval: "deterministic-metrics-v2" } }],
+  ])("rejects recomputed population mismatch: %s", (_field, runOverrides) => {
+    withArtifactMutation("demo-retrieval-fixture-v1", (artifact) => {
+      artifact.run = { ...(artifact.run as Record<string, unknown>), ...runOverrides };
+    }, () => {
+      expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable");
+    });
   });
 
   it.each([
