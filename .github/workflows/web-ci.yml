@@ -57,7 +57,7 @@ jobs:
       - run: npm run storybook:build
       - run: npm run storybook:build:public
       - run: node scripts/verify-public-storybook.mjs
+      - run: npx playwright install --with-deps chromium
       - run: npm run storybook:test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
