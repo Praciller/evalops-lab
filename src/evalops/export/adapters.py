@@ -291,14 +291,30 @@ def build_public_index(artifacts: Sequence[PublicArtifact]) -> PublicEvidenceInd
                     verification_status=artifact.verification_status,
                     data_kind=artifact.data_kind,
                     claim_scope=artifact.claim_scope,
+                    baseline_artifact_id=artifact.baseline_artifact_id,
+                    candidate_artifact_id=artifact.candidate_artifact_id,
                 )
             )
         else:
             raise ValueError("public indexes may contain runs and comparisons, not nested indexes")
+    artifact_by_id = {artifact.artifact_id: artifact for artifact in artifacts}
+    if len(artifact_by_id) != len(artifacts):
+        raise ValueError("duplicate artifact_id in public index")
+    for artifact in artifacts:
+        if not isinstance(artifact, PublicComparisonArtifactV1):
+            continue
+        if artifact.baseline_artifact_id == artifact.candidate_artifact_id:
+            raise ValueError("comparison cannot compare an artifact with itself")
+        for reference_id in (
+            artifact.baseline_artifact_id,
+            artifact.candidate_artifact_id,
+        ):
+            referenced = artifact_by_id.get(reference_id)
+            if not isinstance(referenced, PublicRunArtifactV1):
+                raise ValueError(
+                    "comparison references must reference a run artifact in the same index"
+                )
     return PublicEvidenceIndexV1(
         artifact_id="public-evidence-index-v1",
-        verification_status=VerificationStatus.VERIFIED,
-        data_kind=DataKind.CURATED_DATASET,
-        claim_scope=ClaimScope.PROTOCOL_SPECIFIC,
         artifacts=sorted(summaries, key=lambda item: item.artifact_id),
     )

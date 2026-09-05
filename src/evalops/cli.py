@@ -10,6 +10,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from evalops.benchmarks.miracl import run_miracl_benchmark, write_trec_run
 from evalops.benchmarks.ragtruth import run_ragtruth_benchmark
 from evalops.datasets.io import load_retrieval_ground_truth, load_retrieval_predictions
@@ -518,6 +520,12 @@ def _write_public_artifact_json(artifact: PublicArtifact, output: Path) -> None:
     print(serialized, end="")
 
 
+def _public_export_error(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        return "; ".join(str(detail.get("msg", "validation failed")) for detail in error.errors())
+    return str(error)
+
+
 def _evidence_export(args: argparse.Namespace) -> int:
     try:
         source = _read_json(args.source)
@@ -545,7 +553,9 @@ def _evidence_export(args: argparse.Namespace) -> int:
             )
         _write_public_artifact_json(artifact, args.output)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-        print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        print(
+            json.dumps({"error": _public_export_error(error)}, ensure_ascii=False), file=sys.stderr
+        )
         return 2
     return 0
 
@@ -556,7 +566,9 @@ def _evidence_index(args: argparse.Namespace) -> int:
         index = build_public_index(artifacts)
         _write_public_artifact_json(index, args.output)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-        print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        print(
+            json.dumps({"error": _public_export_error(error)}, ensure_ascii=False), file=sys.stderr
+        )
         return 2
     return 0
 

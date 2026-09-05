@@ -90,3 +90,29 @@ def safe_string_map(value: Mapping[str, str], *, field: str) -> dict[str, str]:
         key = safe_identifier(str(name), field=f"{field} key")
         result[key] = safe_public_text(str(raw_value), field=f"{field}.{key}")
     return result
+
+
+def validate_claim_dimensions(
+    *,
+    verification_status: object,
+    data_kind: object,
+    claim_scope: object,
+    artifact_label: str,
+) -> None:
+    """Reject publication combinations that would overstate the evidence."""
+
+    status = getattr(verification_status, "value", verification_status)
+    kind = getattr(data_kind, "value", data_kind)
+    scope = getattr(claim_scope, "value", claim_scope)
+    if status == "NOT_RUN":
+        raise ValueError(
+            f"{artifact_label} verification_status NOT_RUN is unsupported for executed artifacts"
+        )
+    if kind == "SYNTHETIC_FIXTURE" and scope != "INTEGRATION_ONLY":
+        raise ValueError(
+            "incompatible claim dimensions: SYNTHETIC_FIXTURE requires INTEGRATION_ONLY"
+        )
+    if scope == "BENCHMARK_RESULT" and kind != "OFFICIAL_BENCHMARK":
+        raise ValueError(
+            "incompatible claim dimensions: BENCHMARK_RESULT requires OFFICIAL_BENCHMARK"
+        )

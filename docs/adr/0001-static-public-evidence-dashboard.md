@@ -17,6 +17,14 @@ Python evaluation core -> allowlisted sanitizer -> versioned JSON artifacts -> s
 
 The public contract carries explicit verification status, data kind, and claim scope. Exporters publish bounded metadata, aggregate metrics, stable safe record references, and structured failure summaries. They do not pass through arbitrary `details`, raw text, secrets, local paths, credentials, hidden reasoning, or unapproved files. Index construction accepts an explicit artifact list and never recursively discovers reports.
 
+The three claim dimensions remain separate but have compatibility constraints:
+synthetic fixtures are integration-only, benchmark-result claims require
+official benchmark data, and executed run/comparison artifacts cannot be
+`NOT_RUN`. An evidence index is a catalog with explicit-allowlist status, not a
+curated dataset or benchmark result. Its child IDs are unique, and comparison
+references must resolve to run artifacts in the same index; self-comparisons are
+rejected.
+
 The public path does not run evaluation, inference, model providers, external downloads, or runtime APIs. A public comparison may summarize the existing deterministic regression report, but it does not redefine benchmark validity or population compatibility.
 
 ## Consequences

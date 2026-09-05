@@ -16,7 +16,7 @@ The exporter accepts one explicit source at a time. It does not discover files, 
 
 ## Required claim dimensions
 
-Every artifact declares all three independent dimensions:
+Every run and comparison evidence artifact declares all three independent dimensions:
 
 | Dimension | V1 values | Meaning |
 | --- | --- | --- |
@@ -25,6 +25,16 @@ Every artifact declares all three independent dimensions:
 | `claim_scope` | `INTEGRATION_ONLY`, `PROTOCOL_SPECIFIC`, `BENCHMARK_RESULT` | The narrowest claim the artifact may support. |
 
 These dimensions are not a universal model-quality or model-superiority score. Limitations are required publication text when caveats matter.
+
+The dimensions remain orthogonal, but the contract rejects misleading combinations:
+
+- `SYNTHETIC_FIXTURE` requires `INTEGRATION_ONLY`.
+- `BENCHMARK_RESULT` requires `OFFICIAL_BENCHMARK`.
+- Completed run and comparison artifacts reject `NOT_RUN`. That value is reserved for a future explicit placeholder artifact type.
+
+An index does not carry evidence claim dimensions. It is a catalog with
+`catalog_status=EXPLICIT_ALLOWLIST`; each child summary preserves that child
+artifact's own verification status, data kind, and claim scope.
 
 ## Allowlist and exclusions
 
@@ -35,6 +45,15 @@ The exporter excludes arbitrary `details`, raw responses, prompts, corpus text, 
 ## Determinism
 
 Public JSON uses UTF-8, stable sorted keys, stable list ordering, finite numeric values, and a trailing newline. Exporting the same validated source twice must produce identical bytes. Export output contains no generated UUID, current export timestamp, filesystem path, or unordered collection dependence.
+
+## Index integrity
+
+Index construction uses only an explicit artifact list. Artifact IDs must be
+unique. A comparison may be indexed only when both its baseline and candidate
+IDs refer to run artifacts in that same list; self-comparisons are rejected.
+Missing, duplicate, comparison-to-comparison, and external references fail
+closed. The index is a catalog/manifest, not benchmark evidence and does not
+pretend that mixed children share one top-level claim.
 
 ## CLI contract
 
@@ -49,7 +68,7 @@ Comparison exports additionally require `--baseline-artifact-id` and `--candidat
 ## Acceptance criteria
 
 - Pydantic models reject unknown public fields and unsafe publication text.
-- Tests prove allowlist behavior, raw-detail exclusion, external-evidence suppression, malformed-source failure, deterministic bytes, explicit index membership, and stable regression mapping.
+- Tests prove allowlist behavior, raw-detail exclusion, external-evidence suppression, malformed-source failure, incompatible claim rejection, deterministic bytes, explicit index membership, duplicate/dangling reference rejection, and stable regression mapping.
 - The exporter is usable from Python and from the CLI without adding frontend, server, provider, or external dataset dependencies.
 
 ## Out of scope

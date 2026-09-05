@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from evalops.export.policy import (
     safe_identifier,
@@ -15,6 +15,7 @@ from evalops.export.policy import (
     safe_string_map,
     stable_floats,
     stable_metrics,
+    validate_claim_dimensions,
 )
 from evalops.regression.comparison import MetricDirection, RegressionStatus
 
@@ -40,25 +41,39 @@ class ClaimScope(StrEnum):
     BENCHMARK_RESULT = "BENCHMARK_RESULT"
 
 
-class PublicArtifactBase(BaseModel):
+class PublicArtifactIdentityBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["public-evidence-v1"] = "public-evidence-v1"
     artifact_id: str = Field(min_length=1)
-    verification_status: VerificationStatus
-    data_kind: DataKind
-    claim_scope: ClaimScope
-    limitations: list[str] = Field(default_factory=list)
+    artifact_type: str
 
     @field_validator("artifact_id")
     @classmethod
     def validate_artifact_id(cls, value: str) -> str:
         return safe_identifier(value, field="artifact_id")
 
+
+class PublicEvidenceArtifactBase(PublicArtifactIdentityBase):
+    verification_status: VerificationStatus
+    data_kind: DataKind
+    claim_scope: ClaimScope
+    limitations: list[str] = Field(default_factory=list)
+
     @field_validator("limitations")
     @classmethod
     def validate_limitations(cls, values: list[str]) -> list[str]:
         return sorted({safe_public_text(value, field="limitation") for value in values})
+
+    @model_validator(mode="after")
+    def validate_claims(self) -> Self:
+        validate_claim_dimensions(
+            verification_status=self.verification_status,
+            data_kind=self.data_kind,
+            claim_scope=self.claim_scope,
+            artifact_label=self.artifact_type,
+        )
+        return self
 
 
 class PublicRunMetadata(BaseModel):
@@ -182,7 +197,7 @@ class PublicFailure(BaseModel):
         return safe_identifier(value, field=getattr(info, "field_name", "identifier"))
 
 
-class PublicRunArtifactV1(PublicArtifactBase):
+class PublicRunArtifactV1(PublicEvidenceArtifactBase):
     artifact_type: Literal["run"] = "run"
     run: PublicRunMetadata
     metrics: dict[str, float] = Field(default_factory=dict)
@@ -224,7 +239,7 @@ class PublicComparisonMetric(BaseModel):
         return stable_floats([value], field=getattr(info, "field_name", "comparison value"))[0]
 
 
-class PublicComparisonArtifactV1(PublicArtifactBase):
+class PublicComparisonArtifactV1(PublicEvidenceArtifactBase):
     artifact_type: Literal["comparison"] = "comparison"
     baseline_artifact_id: str
     candidate_artifact_id: str
@@ -251,6 +266,12 @@ class PublicComparisonArtifactV1(PublicArtifactBase):
     def validate_population_compatibility(cls, value: str | None) -> str | None:
         return safe_optional_text(value, field="population_compatibility")
 
+    @model_validator(mode="after")
+    def validate_not_self_comparison(self) -> Self:
+        if self.baseline_artifact_id == self.candidate_artifact_id:
+            raise ValueError("comparison cannot compare an artifact with itself")
+        return self
+
 
 class PublicArtifactSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -264,8 +285,10 @@ class PublicArtifactSummary(BaseModel):
     data_kind: DataKind
     claim_scope: ClaimScope
     metrics: dict[str, float] = Field(default_factory=dict)
+    baseline_artifact_id: str | None = None
+    candidate_artifact_id: str | None = None
 
-    @field_validator("artifact_id", "run_id")
+    @field_validator("artifact_id", "run_id", "baseline_artifact_id", "candidate_artifact_id")
     @classmethod
     def validate_ids(cls, value: str | None, info: object) -> str | None:
         if value is None:
@@ -282,10 +305,48 @@ class PublicArtifactSummary(BaseModel):
     def validate_metrics(cls, value: dict[str, float]) -> dict[str, float]:
         return stable_metrics(value)
 
+    @model_validator(mode="after")
+    def validate_comparison_references(self) -> Self:
+        has_baseline = self.baseline_artifact_id is not None
+        has_candidate = self.candidate_artifact_id is not None
+        if self.artifact_type == "comparison" and not (has_baseline and has_candidate):
+            raise ValueError("comparison index summary must include both artifact references")
+        if self.artifact_type == "run" and (has_baseline or has_candidate):
+            raise ValueError("run index summary cannot include comparison references")
+        if (
+            has_baseline
+            and has_candidate
+            and self.baseline_artifact_id == self.candidate_artifact_id
+        ):
+            raise ValueError("comparison cannot compare an artifact with itself")
+        return self
 
-class PublicEvidenceIndexV1(PublicArtifactBase):
+
+class PublicEvidenceIndexV1(PublicArtifactIdentityBase):
     artifact_type: Literal["index"] = "index"
+    catalog_status: Literal["EXPLICIT_ALLOWLIST"] = "EXPLICIT_ALLOWLIST"
     artifacts: list[PublicArtifactSummary] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_catalog_integrity(self) -> Self:
+        artifact_by_id = {artifact.artifact_id: artifact for artifact in self.artifacts}
+        if len(artifact_by_id) != len(self.artifacts):
+            raise ValueError("duplicate artifact_id in public index")
+        for artifact in self.artifacts:
+            if artifact.artifact_type != "comparison":
+                continue
+            for reference_id in (
+                artifact.baseline_artifact_id,
+                artifact.candidate_artifact_id,
+            ):
+                if reference_id is None:
+                    continue
+                referenced = artifact_by_id.get(reference_id)
+                if referenced is None or referenced.artifact_type != "run":
+                    raise ValueError(
+                        "comparison references must reference a run artifact in the same index"
+                    )
+        return self
 
 
 PublicArtifact = PublicRunArtifactV1 | PublicComparisonArtifactV1 | PublicEvidenceIndexV1

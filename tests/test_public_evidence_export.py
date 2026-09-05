@@ -61,18 +61,64 @@ def _run_payload() -> dict[str, object]:
             },
             "raw_response": "must not be published",
             "api_key": "must not be published",
+            "authorization": "Bearer must-not-be-published",
+            "local_path": r"C:\private\corpus.jsonl",
+            "hidden_reasoning": "must not be published",
+            "raw_corpus": "must not be published",
         },
     }
 
 
-def _artifact(payload: dict[str, object] | None = None):
+def _artifact(
+    payload: dict[str, object] | None = None,
+    *,
+    artifact_id: str = "run-fixture-v1",
+    verification_status: VerificationStatus = VerificationStatus.VERIFIED,
+    data_kind: DataKind = DataKind.SYNTHETIC_FIXTURE,
+    claim_scope: ClaimScope = ClaimScope.INTEGRATION_ONLY,
+):
     return adapt_evaluation_result(
         payload or _run_payload(),
-        artifact_id="run-fixture-v1",
-        verification_status=VerificationStatus.VERIFIED,
-        data_kind=DataKind.SYNTHETIC_FIXTURE,
-        claim_scope=ClaimScope.INTEGRATION_ONLY,
+        artifact_id=artifact_id,
+        verification_status=verification_status,
+        data_kind=data_kind,
+        claim_scope=claim_scope,
         limitations=["Synthetic fixture; not an official benchmark result."],
+    )
+
+
+def _comparison_artifact(
+    *,
+    artifact_id: str = "comparison-v1",
+    baseline_artifact_id: str = "baseline-artifact-v1",
+    candidate_artifact_id: str = "candidate-artifact-v1",
+    verification_status: VerificationStatus = VerificationStatus.VERIFIED,
+    data_kind: DataKind = DataKind.SYNTHETIC_FIXTURE,
+    claim_scope: ClaimScope = ClaimScope.INTEGRATION_ONLY,
+):
+    return adapt_regression_report(
+        {
+            "baseline_run_id": "baseline-v1",
+            "candidate_run_id": "candidate-v1",
+            "passed": True,
+            "comparisons": [
+                {
+                    "metric_name": "recall_at_5",
+                    "direction": "higher_is_better",
+                    "baseline": 0.5,
+                    "current": 0.6,
+                    "delta": 0.1,
+                    "status": "PASS",
+                    "reason": "within configured regression allowance",
+                }
+            ],
+        },
+        artifact_id=artifact_id,
+        baseline_artifact_id=baseline_artifact_id,
+        candidate_artifact_id=candidate_artifact_id,
+        verification_status=verification_status,
+        data_kind=data_kind,
+        claim_scope=claim_scope,
     )
 
 
@@ -87,6 +133,10 @@ def test_run_adapter_publishes_allowlisted_evidence_only() -> None:
     assert "raw_response" not in serialized
     assert "api_key" not in serialized
     assert "internal detail" not in serialized
+    assert "authorization" not in serialized
+    assert "private\\corpus" not in serialized
+    assert "hidden_reasoning" not in serialized
+    assert "raw_corpus" not in serialized
 
 
 def test_serialization_is_deterministic_and_stable() -> None:
@@ -111,6 +161,39 @@ def test_external_record_identity_is_not_published_by_default() -> None:
 
     assert artifact.evidence == []
     assert [failure.record_ref for failure in artifact.failures] == ["run:fixture-run-v1"]
+
+
+@pytest.mark.parametrize(
+    ("data_kind", "claim_scope"),
+    [
+        (DataKind.SYNTHETIC_FIXTURE, ClaimScope.BENCHMARK_RESULT),
+        (DataKind.SYNTHETIC_FIXTURE, ClaimScope.PROTOCOL_SPECIFIC),
+        (DataKind.CURATED_DATASET, ClaimScope.BENCHMARK_RESULT),
+    ],
+)
+def test_rejects_incompatible_claim_dimensions(
+    data_kind: DataKind, claim_scope: ClaimScope
+) -> None:
+    with pytest.raises(ValueError, match="incompatible claim dimensions"):
+        _artifact(data_kind=data_kind, claim_scope=claim_scope)
+
+
+def test_official_benchmark_claim_is_accepted() -> None:
+    artifact = _artifact(
+        artifact_id="official-run-v1",
+        verification_status=VerificationStatus.UNVERIFIED,
+        data_kind=DataKind.OFFICIAL_BENCHMARK,
+        claim_scope=ClaimScope.BENCHMARK_RESULT,
+    )
+
+    assert artifact.claim_scope is ClaimScope.BENCHMARK_RESULT
+
+
+def test_completed_run_and_comparison_reject_not_run() -> None:
+    with pytest.raises(ValueError, match="NOT_RUN"):
+        _artifact(verification_status=VerificationStatus.NOT_RUN)
+    with pytest.raises(ValueError, match="NOT_RUN"):
+        _comparison_artifact(verification_status=VerificationStatus.NOT_RUN)
 
 
 def test_invalid_source_and_unsafe_public_text_fail_closed() -> None:
@@ -146,6 +229,86 @@ def test_index_uses_only_explicit_artifacts_and_sorts_them() -> None:
         "another-run-v1",
         "run-fixture-v1",
     ]
+    assert not hasattr(index, "data_kind")
+    assert not hasattr(index, "claim_scope")
+    assert index.catalog_status == "EXPLICIT_ALLOWLIST"
+    first_serialization = serialize_public_artifact(index)
+    assert first_serialization == serialize_public_artifact(index)
+    assert '"catalog_status": "EXPLICIT_ALLOWLIST"' in first_serialization
+
+
+def test_index_rejects_duplicate_artifact_ids() -> None:
+    artifact = _artifact()
+
+    with pytest.raises(ValueError, match="duplicate artifact_id"):
+        build_public_index([artifact, artifact])
+
+
+@pytest.mark.parametrize(
+    ("baseline_artifact_id", "candidate_artifact_id"),
+    [
+        ("missing-baseline", "candidate-run-v1"),
+        ("baseline-run-v1", "missing-candidate"),
+    ],
+)
+def test_index_rejects_dangling_comparison_references(
+    baseline_artifact_id: str, candidate_artifact_id: str
+) -> None:
+    comparison = _comparison_artifact(
+        baseline_artifact_id=baseline_artifact_id,
+        candidate_artifact_id=candidate_artifact_id,
+    )
+
+    with pytest.raises(ValueError, match="must reference a run artifact in the same index"):
+        build_public_index([comparison])
+
+
+def test_index_rejects_comparison_referencing_non_run_artifact() -> None:
+    baseline_comparison = _comparison_artifact(artifact_id="baseline-comparison-v1")
+    comparison = _comparison_artifact(
+        artifact_id="comparison-v2",
+        baseline_artifact_id="baseline-comparison-v1",
+        candidate_artifact_id="candidate-run-v1",
+    )
+    candidate = _artifact(artifact_id="candidate-run-v1")
+
+    with pytest.raises(ValueError, match="must reference a run artifact in the same index"):
+        build_public_index([baseline_comparison, comparison, candidate])
+
+
+def test_comparison_rejects_self_comparison() -> None:
+    with pytest.raises(ValueError, match="cannot compare an artifact with itself"):
+        _comparison_artifact(
+            baseline_artifact_id="same-artifact-v1",
+            candidate_artifact_id="same-artifact-v1",
+        )
+
+
+def test_mixed_index_preserves_child_claim_dimensions_without_catalog_claims() -> None:
+    synthetic = _artifact(artifact_id="synthetic-run-v1")
+    official = _artifact(
+        artifact_id="official-run-v1",
+        verification_status=VerificationStatus.UNVERIFIED,
+        data_kind=DataKind.OFFICIAL_BENCHMARK,
+        claim_scope=ClaimScope.BENCHMARK_RESULT,
+    )
+    comparison = _comparison_artifact(
+        artifact_id="comparison-v1",
+        baseline_artifact_id="synthetic-run-v1",
+        candidate_artifact_id="official-run-v1",
+        data_kind=DataKind.CURATED_DATASET,
+        claim_scope=ClaimScope.PROTOCOL_SPECIFIC,
+    )
+
+    index = build_public_index([comparison, official, synthetic])
+    summaries = {item.artifact_id: item for item in index.artifacts}
+
+    assert summaries["synthetic-run-v1"].data_kind is DataKind.SYNTHETIC_FIXTURE
+    assert summaries["synthetic-run-v1"].claim_scope is ClaimScope.INTEGRATION_ONLY
+    assert summaries["official-run-v1"].data_kind is DataKind.OFFICIAL_BENCHMARK
+    assert summaries["official-run-v1"].claim_scope is ClaimScope.BENCHMARK_RESULT
+    assert summaries["comparison-v1"].data_kind is DataKind.CURATED_DATASET
+    assert summaries["comparison-v1"].claim_scope is ClaimScope.PROTOCOL_SPECIFIC
 
 
 def test_regression_adapter_preserves_standard_comparison_fields() -> None:
