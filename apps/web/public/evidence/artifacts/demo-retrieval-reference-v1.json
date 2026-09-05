@@ -1,0 +1,147 @@
+{
+  "artifact_id": "demo-retrieval-reference-v1",
+  "artifact_type": "run",
+  "claim_scope": "INTEGRATION_ONLY",
+  "data_kind": "SYNTHETIC_FIXTURE",
+  "evidence": [
+    {
+      "failure_category": "PASS",
+      "metrics": {
+        "hit_rate_at_5": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "metrics_by_k": {},
+      "record_ref": "THQA-001",
+      "relevant_document_ids": [
+        "doc-th-001"
+      ],
+      "retrieved_document_ids": [
+        "doc-th-001",
+        "doc-th-999"
+      ],
+      "scores": []
+    },
+    {
+      "failure_category": "SHOULD_ABSTAIN",
+      "metrics": {
+        "hit_rate_at_5": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_5": 0.0,
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0
+      },
+      "metrics_by_k": {},
+      "record_ref": "THQA-002",
+      "relevant_document_ids": [],
+      "retrieved_document_ids": [],
+      "scores": []
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {
+        "hit_rate_at_5": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_5": 1.0,
+        "precision_at_5": 0.4,
+        "recall_at_5": 1.0
+      },
+      "metrics_by_k": {},
+      "record_ref": "THQA-003",
+      "relevant_document_ids": [
+        "doc-th-002",
+        "doc-th-003"
+      ],
+      "retrieved_document_ids": [
+        "doc-th-003",
+        "doc-th-002"
+      ],
+      "scores": []
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {
+        "hit_rate_at_5": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_5": 1.0,
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0
+      },
+      "metrics_by_k": {},
+      "record_ref": "THQA-004",
+      "relevant_document_ids": [
+        "doc-th-004"
+      ],
+      "retrieved_document_ids": [
+        "doc-th-004"
+      ],
+      "scores": []
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {
+        "hit_rate_at_5": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_5": 1.0,
+        "precision_at_5": 0.4,
+        "recall_at_5": 1.0
+      },
+      "metrics_by_k": {},
+      "record_ref": "THQA-005",
+      "relevant_document_ids": [
+        "doc-th-005",
+        "doc-th-006"
+      ],
+      "retrieved_document_ids": [
+        "doc-th-005",
+        "doc-th-006"
+      ],
+      "scores": []
+    }
+  ],
+  "failures": [
+    {
+      "category": "SHOULD_ABSTAIN",
+      "failure_class": null,
+      "record_ref": "THQA-002"
+    }
+  ],
+  "limitations": [
+    "Metrics are deterministic fixture evidence with no external model or provider inference.",
+    "Synthetic retrieval fixture only; reference evidence for an integration regression demonstration."
+  ],
+  "metrics": {
+    "hit_rate_at_5": 0.8,
+    "mrr": 0.8,
+    "ndcg_at_5": 0.8,
+    "precision_at_5": 0.24000000000000005,
+    "recall_at_5": 0.8
+  },
+  "run": {
+    "benchmark": null,
+    "dataset_name": "retrieval-fixture",
+    "dataset_revision": "checked-in-fixture-v1",
+    "dataset_version": "synthetic-v1",
+    "evaluation_type": "retrieval",
+    "evaluator_versions": {
+      "retrieval": "deterministic-metrics-v1"
+    },
+    "git_commit": null,
+    "language": null,
+    "model": null,
+    "model_provider": null,
+    "random_seed": null,
+    "retriever": null,
+    "retriever_version": null,
+    "run_id": "demo-retrieval-reference-v1",
+    "split": null,
+    "system_name": "reference-predictions",
+    "timestamp": "2026-01-15T12:00:00Z",
+    "tokenization_strategy": null,
+    "top_k": 5
+  },
+  "schema_version": "public-evidence-v1",
+  "verification_status": "VERIFIED"
+}

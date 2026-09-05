@@ -1,7 +1,7 @@
 """Generate the checked-in, synthetic Evidence Console demo bundle.
 
-This script is intentionally explicit: it runs only the two local fixtures named
-below and writes only their two run artifacts plus the explicit index. It never
+This script is intentionally explicit: it runs only the local fixtures named
+below and writes their four approved artifacts plus the explicit index. It never
 scans a reports directory, downloads data, calls a provider, or publishes raw
 evaluation details.
 """
@@ -26,16 +26,21 @@ from evalops.export import (  # noqa: E402
     DataKind,
     VerificationStatus,
     adapt_evaluation_result,
+    adapt_regression_report,
+    assess_population_compatibility,
     build_public_index,
     write_public_artifact,
 )
 from evalops.models.runs import RunConfig  # noqa: E402
+from evalops.regression.comparison import MetricDirection, MetricRule, compare_metrics  # noqa: E402
 from evalops.runners.retrieval import run_retrieval_evaluation  # noqa: E402
 
 FIXED_TIMESTAMP = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
 EVIDENCE_DIR = REPOSITORY_ROOT / "apps" / "web" / "public" / "evidence"
 
 RETRIEVAL_ARTIFACT_ID = "demo-retrieval-fixture-v1"
+REFERENCE_ARTIFACT_ID = "demo-retrieval-reference-v1"
+COMPARISON_ARTIFACT_ID = "demo-retrieval-regression-v1"
 MIRACL_ARTIFACT_ID = "demo-miracl-th-mini-v1"
 
 
@@ -53,12 +58,12 @@ def _normalize_public_numbers(value: Any) -> Any:
     return value
 
 
-def _retrieval_result() -> Any:
+def _retrieval_result(*, predictions_file: str, run_id: str, system_name: str) -> Any:
     ground_truth_rows = _read_jsonl(
         REPOSITORY_ROOT / "datasets" / "fixtures" / "retrieval-ground-truth.jsonl"
     )
     prediction_rows = _read_jsonl(
-        REPOSITORY_ROOT / "datasets" / "fixtures" / "retrieval-predictions.jsonl"
+        REPOSITORY_ROOT / "datasets" / "fixtures" / predictions_file
     )
     ground_truth = {row["query_id"]: row["relevant_document_ids"] for row in ground_truth_rows}
     predictions = {row["query_id"]: row["retrieved_document_ids"] for row in prediction_rows}
@@ -66,11 +71,11 @@ def _retrieval_result() -> Any:
         ground_truth,
         predictions,
         RunConfig(
-            run_id=RETRIEVAL_ARTIFACT_ID,
+            run_id=run_id,
             dataset_name="retrieval-fixture",
             dataset_version="synthetic-v1",
             dataset_revision="checked-in-fixture-v1",
-            system_name="fixture-predictions",
+            system_name=system_name,
             top_k=5,
             evaluator_versions={"retrieval": "deterministic-metrics-v1"},
             timestamp=FIXED_TIMESTAMP,
@@ -131,14 +136,72 @@ def generate(output_dir: Path = EVIDENCE_DIR) -> None:
         "data_kind": DataKind.SYNTHETIC_FIXTURE,
         "claim_scope": ClaimScope.INTEGRATION_ONLY,
     }
-    retrieval = adapt_evaluation_result(
-        _retrieval_result(),
+    candidate = adapt_evaluation_result(
+        _retrieval_result(
+            predictions_file="retrieval-predictions.jsonl",
+            run_id=RETRIEVAL_ARTIFACT_ID,
+            system_name="fixture-predictions",
+        ),
         artifact_id=RETRIEVAL_ARTIFACT_ID,
         limitations=[
             "Synthetic retrieval fixture only; not a production workload or generalization claim.",
             (
                 "Metrics are deterministic fixture evidence with no external model or provider "
                 "inference."
+            ),
+        ],
+        **common,
+    )
+    reference = adapt_evaluation_result(
+        _retrieval_result(
+            predictions_file="retrieval-reference-predictions.jsonl",
+            run_id=REFERENCE_ARTIFACT_ID,
+            system_name="reference-predictions",
+        ),
+        artifact_id=REFERENCE_ARTIFACT_ID,
+        limitations=[
+            (
+                "Synthetic retrieval fixture only; reference evidence for an integration "
+                "regression demonstration."
+            ),
+            (
+                "Metrics are deterministic fixture evidence with no external model or provider "
+                "inference."
+            ),
+        ],
+        **common,
+    )
+    rules = [
+        MetricRule(
+            metric_name=name,
+            direction=MetricDirection.HIGHER_IS_BETTER,
+            max_degradation=0.10,
+        )
+        for name in (
+            "hit_rate_at_5",
+            "mrr",
+            "ndcg_at_5",
+            "precision_at_5",
+            "recall_at_5",
+        )
+    ]
+    report = compare_metrics(candidate.metrics, reference.metrics, rules)
+    comparison = adapt_regression_report(
+        report,
+        artifact_id=COMPARISON_ARTIFACT_ID,
+        baseline_artifact_id=reference.artifact_id,
+        candidate_artifact_id=candidate.artifact_id,
+        baseline_run_id=reference.run.run_id,
+        candidate_run_id=candidate.run.run_id,
+        population_compatibility=assess_population_compatibility(reference, candidate),
+        limitations=[
+            (
+                "Synthetic same-population regression demonstration; not a benchmark or "
+                "model-superiority result."
+            ),
+            (
+                "Regression status uses a fixed aggregate max degradation allowance of 0.10 "
+                "per configured metric."
             ),
         ],
         **common,
@@ -155,9 +218,11 @@ def generate(output_dir: Path = EVIDENCE_DIR) -> None:
         ],
         **common,
     )
-    index = build_public_index([retrieval, miracl])
-    write_public_artifact(retrieval, artifacts_dir / f"{retrieval.artifact_id}.json")
+    index = build_public_index([reference, candidate, miracl, comparison])
+    write_public_artifact(candidate, artifacts_dir / f"{candidate.artifact_id}.json")
+    write_public_artifact(reference, artifacts_dir / f"{reference.artifact_id}.json")
     write_public_artifact(miracl, artifacts_dir / f"{miracl.artifact_id}.json")
+    write_public_artifact(comparison, artifacts_dir / f"{comparison.artifact_id}.json")
     write_public_artifact(index, output_dir / "index.json")
 
 

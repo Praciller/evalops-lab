@@ -1,0 +1,65 @@
+{
+  "artifact_id": "demo-retrieval-regression-v1",
+  "artifact_type": "comparison",
+  "baseline_artifact_id": "demo-retrieval-reference-v1",
+  "baseline_run_id": "demo-retrieval-reference-v1",
+  "candidate_artifact_id": "demo-retrieval-fixture-v1",
+  "candidate_run_id": "demo-retrieval-fixture-v1",
+  "claim_scope": "INTEGRATION_ONLY",
+  "comparisons": [
+    {
+      "baseline_value": 0.8,
+      "candidate_value": 0.6,
+      "delta": -0.20000000000000007,
+      "direction": "higher_is_better",
+      "metric_name": "hit_rate_at_5",
+      "reason": "degradation exceeded allowance of 0.1",
+      "status": "REGRESSION"
+    },
+    {
+      "baseline_value": 0.8,
+      "candidate_value": 0.6,
+      "delta": -0.20000000000000007,
+      "direction": "higher_is_better",
+      "metric_name": "mrr",
+      "reason": "degradation exceeded allowance of 0.1",
+      "status": "REGRESSION"
+    },
+    {
+      "baseline_value": 0.8,
+      "candidate_value": 0.5226294385530916,
+      "delta": -0.2773705614469084,
+      "direction": "higher_is_better",
+      "metric_name": "ndcg_at_5",
+      "reason": "degradation exceeded allowance of 0.1",
+      "status": "REGRESSION"
+    },
+    {
+      "baseline_value": 0.24000000000000005,
+      "candidate_value": 0.16,
+      "delta": -0.08000000000000004,
+      "direction": "higher_is_better",
+      "metric_name": "precision_at_5",
+      "reason": "within configured regression allowance",
+      "status": "PASS"
+    },
+    {
+      "baseline_value": 0.8,
+      "candidate_value": 0.5,
+      "delta": -0.30000000000000004,
+      "direction": "higher_is_better",
+      "metric_name": "recall_at_5",
+      "reason": "degradation exceeded allowance of 0.1",
+      "status": "REGRESSION"
+    }
+  ],
+  "data_kind": "SYNTHETIC_FIXTURE",
+  "limitations": [
+    "Regression status uses a fixed aggregate max degradation allowance of 0.10 per configured metric.",
+    "Synthetic same-population regression demonstration; not a benchmark or model-superiority result."
+  ],
+  "passed": false,
+  "population_compatibility": "MATCHED",
+  "schema_version": "public-evidence-v1",
+  "verification_status": "VERIFIED"
+}

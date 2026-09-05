@@ -39,6 +39,38 @@
       },
       "run_id": "demo-retrieval-fixture-v1",
       "verification_status": "VERIFIED"
+    },
+    {
+      "artifact_id": "demo-retrieval-reference-v1",
+      "artifact_type": "run",
+      "baseline_artifact_id": null,
+      "candidate_artifact_id": null,
+      "claim_scope": "INTEGRATION_ONLY",
+      "data_kind": "SYNTHETIC_FIXTURE",
+      "dataset_name": "retrieval-fixture",
+      "evaluation_type": "retrieval",
+      "metrics": {
+        "hit_rate_at_5": 0.8,
+        "mrr": 0.8,
+        "ndcg_at_5": 0.8,
+        "precision_at_5": 0.24000000000000005,
+        "recall_at_5": 0.8
+      },
+      "run_id": "demo-retrieval-reference-v1",
+      "verification_status": "VERIFIED"
+    },
+    {
+      "artifact_id": "demo-retrieval-regression-v1",
+      "artifact_type": "comparison",
+      "baseline_artifact_id": "demo-retrieval-reference-v1",
+      "candidate_artifact_id": "demo-retrieval-fixture-v1",
+      "claim_scope": "INTEGRATION_ONLY",
+      "data_kind": "SYNTHETIC_FIXTURE",
+      "dataset_name": null,
+      "evaluation_type": null,
+      "metrics": {},
+      "run_id": "demo-retrieval-fixture-v1",
+      "verification_status": "VERIFIED"
     }
   ],
   "catalog_status": "EXPLICIT_ALLOWLIST",
