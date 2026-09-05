@@ -59,6 +59,38 @@ function withIndexMutation(
   }
 }
 
+function withEvidenceMutations(
+  mutateArtifacts: (artifactId: string, artifact: Record<string, unknown>) => void,
+  mutateIndex: (index: Record<string, unknown>) => void,
+  assertion: () => void,
+) {
+  const artifactRoot = path.join(process.cwd(), "public/evidence/artifacts");
+  const indexPath = path.join(process.cwd(), "public/evidence/index.json");
+  const originalReadFileSync = fs.readFileSync;
+  const readFileSyncSpy = vi.spyOn(fs, "readFileSync").mockImplementation((file, options) => {
+    const content = originalReadFileSync(file, options);
+    if (typeof content !== "string") return content;
+    if (String(file) === indexPath) {
+      const index = JSON.parse(content) as Record<string, unknown>;
+      mutateIndex(index);
+      return JSON.stringify(index);
+    }
+    if (String(file).startsWith(`${artifactRoot}${path.sep}`)) {
+      const artifactId = path.basename(String(file), ".json");
+      const artifact = JSON.parse(content) as Record<string, unknown>;
+      mutateArtifacts(artifactId, artifact);
+      return JSON.stringify(artifact);
+    }
+    return content;
+  });
+
+  try {
+    assertion();
+  } finally {
+    readFileSyncSpy.mockRestore();
+  }
+}
+
 describe("evidence repository", () => {
   it("loads only artifacts named by the explicit index", () => {
     const index = getEvidenceIndex();
@@ -112,6 +144,64 @@ describe("evidence repository", () => {
     withArtifactMutation("demo-retrieval-regression-v1", mutate, () => {
       expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable");
     });
+  });
+
+  it("rejects comparison data_kind mismatch at the repository boundary", () => {
+    withEvidenceMutations(
+      (artifactId, artifact) => {
+        if (artifactId === "demo-retrieval-regression-v1") artifact.data_kind = "OFFICIAL_BENCHMARK";
+      },
+      (index) => {
+        const summary = (index.artifacts as Array<Record<string, unknown>>).find(
+          (item) => item.artifact_id === "demo-retrieval-regression-v1",
+        )!;
+        summary.data_kind = "OFFICIAL_BENCHMARK";
+      },
+      () => expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable"),
+    );
+  });
+
+  it("rejects schema-valid comparison claim_scope mismatch at the repository boundary", () => {
+    withEvidenceMutations(
+      (artifactId, artifact) => {
+        if (artifactId === "demo-retrieval-regression-v1") {
+          artifact.data_kind = "CURATED_DATASET";
+          artifact.claim_scope = "PROTOCOL_SPECIFIC";
+        }
+        if (artifactId === "demo-retrieval-reference-v1" || artifactId === "demo-retrieval-fixture-v1") {
+          artifact.data_kind = "CURATED_DATASET";
+        }
+      },
+      (index) => {
+        for (const summary of index.artifacts as Array<Record<string, unknown>>) {
+          if (summary.artifact_id === "demo-retrieval-regression-v1") {
+            summary.data_kind = "CURATED_DATASET";
+            summary.claim_scope = "PROTOCOL_SPECIFIC";
+          } else if (
+            summary.artifact_id === "demo-retrieval-reference-v1" ||
+            summary.artifact_id === "demo-retrieval-fixture-v1"
+          ) {
+            summary.data_kind = "CURATED_DATASET";
+          }
+        }
+      },
+      () => expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable"),
+    );
+  });
+
+  it("rejects comparison verification stronger than the weakest operand", () => {
+    withEvidenceMutations(
+      (artifactId, artifact) => {
+        if (artifactId === "demo-retrieval-fixture-v1") artifact.verification_status = "PARTIAL";
+      },
+      (index) => {
+        const summary = (index.artifacts as Array<Record<string, unknown>>).find(
+          (item) => item.artifact_id === "demo-retrieval-fixture-v1",
+        )!;
+        summary.verification_status = "PARTIAL";
+      },
+      () => expect(() => getComparisonBundle("demo-retrieval-regression-v1")).toThrow("Evidence unavailable"),
+    );
   });
 
   it("rejects dangling and comparison-to-comparison references", () => {

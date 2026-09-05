@@ -15,6 +15,7 @@ on:
       - "src/evalops/failures/**"
       - "src/evalops/models/retrieval.py"
       - "src/evalops/runners/retrieval.py"
+      - "src/evalops/regression/**"
       - "src/evalops/models/runs.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:

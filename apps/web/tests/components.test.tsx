@@ -26,6 +26,7 @@ describe("Evidence Console components", () => {
     expect(screen.getByRole("link", { name: /demo-retrieval-fixture-v1/ })).toBeInTheDocument();
     expect(screen.getByText(/Population compatibility: MATCHED/i)).toBeInTheDocument();
     expect(screen.getAllByText(/REGRESSION/)).toHaveLength(4);
+    expect(screen.getByText(/2 matched records have a category transition or metric delta/)).toBeInTheDocument();
   });
 
   it("adds a bounded regression evidence section to the overview", () => {
@@ -48,11 +49,18 @@ describe("Evidence Console components", () => {
     render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Changed records only" }));
     expect(screen.queryByText("THQA-001")).not.toBeInTheDocument();
+    expect(screen.queryByText("THQA-002")).not.toBeInTheDocument();
     expect(screen.getByText("THQA-004")).toBeInTheDocument();
     expect(screen.getByText("THQA-005")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search record ID" }), { target: { value: "THQA-004" } });
     expect(screen.getByText("THQA-004")).toBeInTheDocument();
     expect(screen.queryByText("THQA-005")).not.toBeInTheDocument();
+  });
+
+  it("keeps unchanged persistent categories visible when changed-only is disabled", () => {
+    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} />);
+    expect(screen.getByText("THQA-002")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Persistent category" })).toBeInTheDocument();
   });
 
   it("renders an unavailable state instead of partially joining record populations", () => {

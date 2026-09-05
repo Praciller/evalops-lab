@@ -9,6 +9,14 @@ const appBasePath = process.env.PAGES_MODE === "true" ? "/evalops-lab" : "";
 const localPort = process.env.PAGES_MODE === "true" ? 4174 : 4173;
 const homePath = appBasePath ? `${appBasePath}/` : "/";
 
+async function tabUntilFocused(page: import("@playwright/test").Page, locator: import("@playwright/test").Locator, maxTabs = 20) {
+  for (let index = 0; index < maxTabs; index += 1) {
+    await page.keyboard.press("Tab");
+    if (await locator.evaluate((element) => element === document.activeElement)) return true;
+  }
+  return false;
+}
+
 test("overview is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
@@ -66,6 +74,12 @@ test("comparison detail is accessible, local-only, and has a stable desktop visu
   expect(requests.every((url) => url.startsWith(`http://127.0.0.1:${localPort}${appBasePath}/`) || url.startsWith("data:"))).toBe(true);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+  await page.getByRole("button", { name: "Dark theme" }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.getByRole("button", { name: "Light theme" })).toBeVisible();
+  await page.getByRole("button", { name: "Light theme" }).click();
+  expect(await tabUntilFocused(page, page.locator('nav[aria-label="Breadcrumb"] a'))).toBe(true);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.screenshot({ path: path.join(screenshotsDir, "comparison-desktop.png"), fullPage: true });
   await expect(page).toHaveScreenshot("comparison-desktop.png", { clip: desktopClip });
 });
@@ -98,6 +112,15 @@ test("failure explorer is accessible, local-only, and has a stable desktop visua
   expect(requests.every((url) => url.startsWith(`http://127.0.0.1:${localPort}${appBasePath}/`) || url.startsWith("data:"))).toBe(true);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+  for (const control of [
+    page.getByRole("combobox", { name: "Transition" }),
+    page.getByRole("combobox", { name: "Candidate category" }),
+    page.getByRole("searchbox", { name: "Search record ID" }),
+    page.getByRole("checkbox", { name: "Changed records only" }),
+  ]) {
+    expect(await tabUntilFocused(page, control)).toBe(true);
+  }
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.screenshot({ path: path.join(screenshotsDir, "failure-explorer-desktop.png"), fullPage: true });
   await expect(page).toHaveScreenshot("failure-explorer-desktop.png", { clip: desktopClip });
 });

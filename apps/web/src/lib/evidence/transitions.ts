@@ -30,6 +30,15 @@ export type FailureTransitionResult =
   | { status: "AVAILABLE"; rows: FailureTransitionRow[] }
   | { status: "UNAVAILABLE"; reason: "RECORD_SET_MISMATCH" };
 
+export function hasRecordChange(row: FailureTransitionRow): boolean {
+  return (
+    row.metricDeltas.length > 0 ||
+    row.kind === "INTRODUCED_FAILURE" ||
+    row.kind === "RESOLVED_FAILURE" ||
+    row.kind === "CHANGED_FAILURE_CATEGORY"
+  );
+}
+
 function classifyTransition(baseline: string, candidate: string): FailureTransitionKind {
   if (baseline === "PASS" && candidate === "PASS") return "STABLE_PASS";
   if (baseline === "PASS") return "INTRODUCED_FAILURE";

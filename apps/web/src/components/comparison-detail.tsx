@@ -5,7 +5,7 @@ import { EvidenceLayout } from "@/components/evidence-layout";
 import { LimitationsPanel } from "@/components/provenance-panel";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evidence/format";
-import { buildFailureTransitions } from "@/lib/evidence/transitions";
+import { buildFailureTransitions, hasRecordChange } from "@/lib/evidence/transitions";
 import type { ComparisonBundle } from "@/lib/evidence/repository";
 
 function formatNullable(value: number | null): string {
@@ -27,7 +27,7 @@ export function ComparisonDetail({ bundle }: { bundle: ComparisonBundle }) {
   const { comparison, baseline, candidate } = bundle;
   const transitions = buildFailureTransitions(baseline, candidate);
   const changedRecords = transitions.status === "AVAILABLE"
-    ? transitions.rows.filter((row) => row.kind !== "STABLE_PASS" || row.metricDeltas.length > 0).length
+    ? transitions.rows.filter(hasRecordChange).length
     : null;
   const regressionCount = comparison.comparisons.filter((row) => row.status === "REGRESSION").length;
   const passCount = comparison.comparisons.filter((row) => row.status === "PASS").length;

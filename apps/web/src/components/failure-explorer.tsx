@@ -9,6 +9,7 @@ import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evid
 import type { ComparisonBundle } from "@/lib/evidence/repository";
 import {
   buildFailureTransitions,
+  hasRecordChange,
   type FailureTransitionKind,
   type FailureTransitionRow,
 } from "@/lib/evidence/transitions";
@@ -20,10 +21,6 @@ const transitionLabels: Record<FailureTransitionKind, string> = {
   PERSISTENT_CATEGORY: "Persistent category",
   CHANGED_FAILURE_CATEGORY: "Changed failure category",
 };
-
-function changedRow(row: FailureTransitionRow): boolean {
-  return row.kind !== "STABLE_PASS" || row.metricDeltas.length > 0;
-}
 
 export function FailureExplorer({ bundle }: { bundle: ComparisonBundle }) {
   const transitionResult = buildFailureTransitions(bundle.baseline, bundle.candidate);
@@ -54,7 +51,7 @@ function AvailableExplorer({ bundle, rows }: { bundle: ComparisonBundle; rows: F
   const filteredRows = rows.filter((row) => (
     (transition === "ALL" || row.kind === transition) &&
     (candidateCategory === "ALL" || row.candidateCategory === candidateCategory) &&
-    (!changedOnly || changedRow(row)) &&
+    (!changedOnly || hasRecordChange(row)) &&
     row.recordRef.toLowerCase().includes(search.toLowerCase())
   ));
 
