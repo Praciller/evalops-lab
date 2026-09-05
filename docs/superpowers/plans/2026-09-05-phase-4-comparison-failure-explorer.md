@@ -97,6 +97,7 @@ def _comparison_artifact(
         population_compatibility=population_compatibility,
     )
 
+
 def test_population_compatibility_is_typed_and_same_population_matches() -> None:
     baseline = _artifact(artifact_id="baseline-run-v1")
     candidate = _artifact(artifact_id="candidate-run-v1")
@@ -109,7 +110,9 @@ def test_population_mismatch_is_incompatible() -> None:
         _run_payload() | {"run": _run_payload()["run"] | {"dataset_version": "synthetic-v2"}},
         artifact_id="candidate-run-v1",
     )
-    assert assess_population_compatibility(baseline, candidate) is PopulationCompatibility.INCOMPATIBLE
+    assert (
+        assess_population_compatibility(baseline, candidate) is PopulationCompatibility.INCOMPATIBLE
+    )
 ```
 ```python
 def test_index_rejects_matched_comparison_when_population_differs() -> None:
@@ -128,7 +131,9 @@ def test_index_rejects_matched_comparison_when_population_differs() -> None:
 
 
 def test_index_rejects_comparison_claim_stronger_than_operand() -> None:
-    baseline = _artifact(artifact_id="baseline-run-v1", verification_status=VerificationStatus.PARTIAL)
+    baseline = _artifact(
+        artifact_id="baseline-run-v1", verification_status=VerificationStatus.PARTIAL
+    )
     candidate = _artifact(artifact_id="candidate-run-v1")
     comparison = _comparison_artifact(
         baseline_artifact_id=baseline.artifact_id,
@@ -152,6 +157,7 @@ class PopulationCompatibility(StrEnum):
     UNVERIFIED = "UNVERIFIED"
     INCOMPATIBLE = "INCOMPATIBLE"
 
+
 class PublicComparisonArtifactV1(PublicEvidenceArtifactBase):
     artifact_type: Literal["comparison"] = "comparison"
     baseline_artifact_id: str
@@ -166,8 +172,15 @@ class PublicComparisonArtifactV1(PublicEvidenceArtifactBase):
 ```python
 # compatibility.py
 POPULATION_FIELDS = (
-    "dataset_name", "dataset_version", "dataset_revision", "evaluation_type",
-    "benchmark", "language", "split", "top_k", "evaluator_versions",
+    "dataset_name",
+    "dataset_version",
+    "dataset_revision",
+    "evaluation_type",
+    "benchmark",
+    "language",
+    "split",
+    "top_k",
+    "evaluator_versions",
 )
 VERIFICATION_STRENGTH = {
     VerificationStatus.UNVERIFIED: 0,
@@ -175,18 +188,29 @@ VERIFICATION_STRENGTH = {
     VerificationStatus.VERIFIED: 2,
 }
 
+
 def assess_population_compatibility(baseline, candidate):
-    return PopulationCompatibility.MATCHED if all(
-        getattr(baseline.run, field) == getattr(candidate.run, field)
-        for field in POPULATION_FIELDS
-    ) else PopulationCompatibility.INCOMPATIBLE
+    return (
+        PopulationCompatibility.MATCHED
+        if all(
+            getattr(baseline.run, field) == getattr(candidate.run, field)
+            for field in POPULATION_FIELDS
+        )
+        else PopulationCompatibility.INCOMPATIBLE
+    )
 ```
 ```python
 # compatibility.py
 def validate_comparison_operands(comparison, baseline, candidate) -> None:
-    if comparison.data_kind is not baseline.data_kind or comparison.data_kind is not candidate.data_kind:
+    if (
+        comparison.data_kind is not baseline.data_kind
+        or comparison.data_kind is not candidate.data_kind
+    ):
         raise ValueError("comparison data_kind must match both operand runs")
-    if comparison.claim_scope is not baseline.claim_scope or comparison.claim_scope is not candidate.claim_scope:
+    if (
+        comparison.claim_scope is not baseline.claim_scope
+        or comparison.claim_scope is not candidate.claim_scope
+    ):
         raise ValueError("comparison claim_scope must match both operand runs")
     max_strength = min(
         VERIFICATION_STRENGTH[baseline.verification_status],
@@ -195,7 +219,10 @@ def validate_comparison_operands(comparison, baseline, candidate) -> None:
     if VERIFICATION_STRENGTH[comparison.verification_status] > max_strength:
         raise ValueError("comparison verification cannot be stronger than operand evidence")
     actual = assess_population_compatibility(baseline, candidate)
-    if comparison.population_compatibility is PopulationCompatibility.MATCHED and actual is not PopulationCompatibility.MATCHED:
+    if (
+        comparison.population_compatibility is PopulationCompatibility.MATCHED
+        and actual is not PopulationCompatibility.MATCHED
+    ):
         raise ValueError("comparison population compatibility does not match operand metadata")
 ```
 
@@ -212,7 +239,13 @@ evidence_export.add_argument(
 )
 
 # _evidence_export comparison branch
-population_compatibility=PopulationCompatibility(args.population_compatibility),
+artifact = adapt_regression_report(
+    source,
+    baseline_artifact_id=args.baseline_artifact_id,
+    candidate_artifact_id=args.candidate_artifact_id,
+    population_compatibility=PopulationCompatibility(args.population_compatibility),
+    **common,
+)
 ```
 
 Add this CLI test; keep the existing invalid-claim and dangling-index tests unchanged:
@@ -222,15 +255,35 @@ def test_evidence_cli_types_population_compatibility(tmp_path, capsys) -> None:
     source_path = tmp_path / "comparison.json"
     output_path = tmp_path / "comparison-public.json"
     source_path.write_text(json.dumps({"passed": True, "comparisons": []}), encoding="utf-8")
-    assert main([
-        "evidence", "export", "--source", str(source_path), "--source-type", "comparison",
-        "--output", str(output_path), "--artifact-id", "comparison-v1",
-        "--verification-status", "VERIFIED", "--data-kind", "SYNTHETIC_FIXTURE",
-        "--claim-scope", "INTEGRATION_ONLY",
-        "--baseline-artifact-id", "baseline-v1",
-        "--candidate-artifact-id", "candidate-v1",
-        "--population-compatibility", "UNVERIFIED",
-    ]) == 0
+    assert (
+        main(
+            [
+                "evidence",
+                "export",
+                "--source",
+                str(source_path),
+                "--source-type",
+                "comparison",
+                "--output",
+                str(output_path),
+                "--artifact-id",
+                "comparison-v1",
+                "--verification-status",
+                "VERIFIED",
+                "--data-kind",
+                "SYNTHETIC_FIXTURE",
+                "--claim-scope",
+                "INTEGRATION_ONLY",
+                "--baseline-artifact-id",
+                "baseline-v1",
+                "--candidate-artifact-id",
+                "candidate-v1",
+                "--population-compatibility",
+                "UNVERIFIED",
+            ]
+        )
+        == 0
+    )
     capsys.readouterr()
     artifact = json.loads(output_path.read_text(encoding="utf-8"))
     assert artifact["population_compatibility"] == "UNVERIFIED"
@@ -310,9 +363,7 @@ def _retrieval_result(*, predictions_file: str, run_id: str, system_name: str) -
     ground_truth_rows = _read_jsonl(
         REPOSITORY_ROOT / "datasets" / "fixtures" / "retrieval-ground-truth.jsonl"
     )
-    prediction_rows = _read_jsonl(
-        REPOSITORY_ROOT / "datasets" / "fixtures" / predictions_file
-    )
+    prediction_rows = _read_jsonl(REPOSITORY_ROOT / "datasets" / "fixtures" / predictions_file)
     ground_truth = {row["query_id"]: row["relevant_document_ids"] for row in ground_truth_rows}
     predictions = {row["query_id"]: row["retrieved_document_ids"] for row in prediction_rows}
     result = run_retrieval_evaluation(
@@ -349,9 +400,7 @@ rules = [
         direction=MetricDirection.HIGHER_IS_BETTER,
         max_degradation=0.10,
     )
-    for name in (
-        "hit_rate_at_5", "mrr", "ndcg_at_5", "precision_at_5", "recall_at_5"
-    )
+    for name in ("hit_rate_at_5", "mrr", "ndcg_at_5", "precision_at_5", "recall_at_5")
 ]
 report = compare_metrics(candidate.metrics, reference.metrics, rules)
 comparison = adapt_regression_report(
