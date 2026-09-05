@@ -120,6 +120,9 @@ body {
 .badge-partial, .badge-unverified { border-color: color-mix(in srgb, var(--caution) 40%, var(--line)); color: var(--caution); background: var(--caution-soft); }
 .badge-not-run { border-color: var(--line); color: var(--ink-muted); background: var(--surface-muted); }
 .badge-data { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); color: var(--accent); background: var(--accent-soft); }
+.badge-data-synthetic { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); color: var(--accent); background: var(--accent-soft); }
+.badge-data-curated { border-color: color-mix(in srgb, var(--scope) 35%, var(--line)); color: var(--scope); background: var(--scope-soft); }
+.badge-data-official { border-color: color-mix(in srgb, var(--success) 40%, var(--line)); color: var(--success); background: var(--success-soft); }
 .badge-scope { border-color: color-mix(in srgb, var(--scope) 35%, var(--line)); color: var(--scope); background: var(--scope-soft); }
 .table-scroll { overflow-x: auto; contain: layout; }
 .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.875rem; }
