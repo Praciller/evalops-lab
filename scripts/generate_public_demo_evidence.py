@@ -43,6 +43,16 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
+def _normalize_public_numbers(value: Any) -> Any:
+    if isinstance(value, float):
+        return round(value, 12)
+    if isinstance(value, dict):
+        return {key: _normalize_public_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_public_numbers(item) for item in value]
+    return value
+
+
 def _retrieval_result() -> Any:
     ground_truth_rows = _read_jsonl(
         REPOSITORY_ROOT / "datasets" / "fixtures" / "retrieval-ground-truth.jsonl"
@@ -100,20 +110,15 @@ def _miracl_result() -> Any:
             timestamp=FIXED_TIMESTAMP,
         ),
     )
-    # BM25 sums equivalent terms in a set iteration order that can vary between
-    # fresh Python processes. Normalize only the public demo's exposed scores;
-    # evaluator outputs and ranking semantics remain unchanged.
-    details = dict(result.details)
-    per_query = details.get("per_query")
-    if isinstance(per_query, dict):
-        details["per_query"] = {
-            query_id: {
-                **record,
-                "scores": [round(float(score), 12) for score in record.get("scores", [])],
-            }
-            for query_id, record in per_query.items()
+    # BM25 and metric aggregation can vary in low-order float bits across fresh
+    # Python processes and platforms. Normalize only the public demo's exposed
+    # numbers; evaluator outputs and ranking semantics remain unchanged.
+    return result.model_copy(
+        update={
+            "metrics": _normalize_public_numbers(result.metrics),
+            "details": _normalize_public_numbers(result.details),
         }
-    return result.model_copy(update={"details": details})
+    )
 
 
 def generate(output_dir: Path = EVIDENCE_DIR) -> None:
