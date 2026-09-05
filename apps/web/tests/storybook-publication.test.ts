@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const publicConfigPath = path.join(process.cwd(), ".storybook-public", "main.ts");
 const publicManifestPath = path.join(process.cwd(), "storybook.public.json");
+const pagesBuildScriptPath = path.join(process.cwd(), "scripts", "build-pages.mjs");
 
 const expectedTitles = [
   "Foundations/Canvas",
@@ -37,5 +38,16 @@ describe("public Storybook publication boundary", () => {
     expect(manifest.titles).toEqual(expectedTitles);
     expect(new Set(manifest.titles as string[]).size).toBe(expectedTitles.length);
     expect((manifest.titles as string[]).some((title) => /^(Internal|Debug)\//.test(title))).toBe(false);
+  });
+
+  it("assembles the verified public Storybook into the Pages output", () => {
+    const script = fs.readFileSync(pagesBuildScriptPath, "utf8");
+
+    expect(script).toContain('GITHUB_PAGES: "true"');
+    expect(script).toContain('"storybook:build:public"');
+    expect(script).toContain("verify-public-storybook.mjs");
+    expect(script).toContain("storybook-public-static");
+    expect(script).toContain('"out", "storybook"');
+    expect(script).toContain("cpSync");
   });
 });

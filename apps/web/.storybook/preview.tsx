@@ -30,9 +30,9 @@ const preview: Preview = {
     (Story, context) => {
       const theme = context.globals.theme === "dark" ? "dark" : "light";
       return (
-        <div className={`${theme} min-h-screen bg-canvas p-4 text-ink`}>
+        <main className={`${theme} min-h-screen bg-canvas p-4 text-ink`}>
           <Story />
-        </div>
+        </main>
       ) as ReactNode;
     },
   ],

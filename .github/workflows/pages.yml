@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "DESIGN.md"
       - "apps/web/**"
       - "datasets/fixtures/miracl-th-mini/**"
       - "datasets/fixtures/retrieval-*.jsonl"
@@ -39,7 +40,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - name: Install dependencies
@@ -64,6 +65,9 @@ jobs:
           test -f out/runs/demo-miracl-th-mini-v1/index.html
           test -f out/comparisons/demo-retrieval-regression-v1/index.html
           test -f out/comparisons/demo-retrieval-regression-v1/failures/index.html
+          test -f out/storybook/index.html
+          test -f out/storybook/index.json
+          ! grep -R -n -E 'Internal/|Debug/|\.internal\.stories' out/storybook
           test ! -d out/reports
           test ! -d out/datasets
       - name: Configure GitHub Pages
