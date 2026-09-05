@@ -1,6 +1,8 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from evalops.cli import main
 from evalops.export import (
     ClaimScope,
@@ -110,6 +112,79 @@ def test_evidence_cli_rejects_comparison_without_explicit_artifact_refs(tmp_path
     )
     assert not output_path.exists()
     assert "comparison exports require" in capsys.readouterr().err
+
+
+def test_evidence_cli_types_population_compatibility(tmp_path, capsys) -> None:
+    source_path = tmp_path / "comparison.json"
+    output_path = tmp_path / "comparison-public.json"
+    source_path.write_text(json.dumps({"passed": True, "comparisons": []}), encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "evidence",
+                "export",
+                "--source",
+                str(source_path),
+                "--source-type",
+                "comparison",
+                "--output",
+                str(output_path),
+                "--artifact-id",
+                "comparison-v1",
+                "--verification-status",
+                "VERIFIED",
+                "--data-kind",
+                "SYNTHETIC_FIXTURE",
+                "--claim-scope",
+                "INTEGRATION_ONLY",
+                "--baseline-artifact-id",
+                "baseline-v1",
+                "--candidate-artifact-id",
+                "candidate-v1",
+                "--population-compatibility",
+                "UNVERIFIED",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    artifact = json.loads(output_path.read_text(encoding="utf-8"))
+    assert artifact["population_compatibility"] == "UNVERIFIED"
+
+
+def test_evidence_cli_rejects_unknown_population_compatibility(tmp_path) -> None:
+    source_path = tmp_path / "comparison.json"
+    output_path = tmp_path / "comparison-public.json"
+    source_path.write_text(json.dumps({"passed": True, "comparisons": []}), encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "evidence",
+                "export",
+                "--source",
+                str(source_path),
+                "--source-type",
+                "comparison",
+                "--output",
+                str(output_path),
+                "--artifact-id",
+                "comparison-v1",
+                "--verification-status",
+                "VERIFIED",
+                "--data-kind",
+                "SYNTHETIC_FIXTURE",
+                "--claim-scope",
+                "INTEGRATION_ONLY",
+                "--baseline-artifact-id",
+                "baseline-v1",
+                "--candidate-artifact-id",
+                "candidate-v1",
+                "--population-compatibility",
+                "NOT_A_COMPATIBILITY",
+            ]
+        )
 
 
 def test_evidence_cli_rejects_invalid_claim_combination_without_writing(tmp_path, capsys) -> None:

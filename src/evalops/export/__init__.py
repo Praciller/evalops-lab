@@ -5,10 +5,15 @@ from evalops.export.adapters import (
     adapt_regression_report,
     build_public_index,
 )
+from evalops.export.compatibility import (
+    assess_population_compatibility,
+    validate_comparison_operands,
+)
 from evalops.export.models import (
     PUBLIC_EVIDENCE_SCHEMA_VERSION,
     ClaimScope,
     DataKind,
+    PopulationCompatibility,
     PublicArtifact,
     PublicArtifactIdentityBase,
     PublicArtifactSummary,
@@ -37,6 +42,7 @@ __all__ = [
     "PublicArtifactSummary",
     "PublicComparisonArtifactV1",
     "PublicComparisonMetric",
+    "PopulationCompatibility",
     "PublicEvidenceArtifactBase",
     "PublicEvidenceIndexV1",
     "PublicEvidenceRecord",
@@ -47,6 +53,8 @@ __all__ = [
     "adapt_evaluation_result",
     "adapt_regression_report",
     "build_public_index",
+    "assess_population_compatibility",
+    "validate_comparison_operands",
     "load_public_artifact",
     "serialize_public_artifact",
     "write_public_artifact",
