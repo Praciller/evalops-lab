@@ -27,6 +27,14 @@ test("overview remains usable on mobile and keyboard focus is visible", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(homePath);
   await expect(page.getByRole("heading", { name: "Evidence Console" })).toBeVisible();
+  const rootWidth = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(rootWidth.scrollWidth).toBeLessThanOrEqual(rootWidth.clientWidth);
+  await page.evaluate(() => window.scrollTo(999, 0));
+  expect(await page.evaluate(() => window.scrollX)).toBe(0);
+  expect(await page.locator(".table-scroll").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   await page.keyboard.press("Tab");
   await expect(page.locator(":focus")).toHaveAttribute("href", `${appBasePath}/`);
   await page.screenshot({ path: path.join(screenshotsDir, "overview-mobile.png"), fullPage: true });

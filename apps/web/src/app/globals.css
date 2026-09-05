@@ -85,6 +85,7 @@ body {
 .badge-not-run { border-color: var(--line); color: var(--muted); background: var(--surface-muted); }
 .badge-data { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); color: var(--accent); background: var(--accent-soft); }
 .badge-scope { border-color: color-mix(in srgb, var(--scope) 35%, var(--line)); color: var(--scope); background: var(--scope-soft); }
+.table-scroll { overflow-x: auto; contain: layout paint; }
 .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.875rem; }
 .data-table th, .data-table td { border-bottom: 1px solid var(--line); padding: 12px 10px; vertical-align: top; }
 .data-table thead th { color: var(--muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
