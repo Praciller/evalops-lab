@@ -1,0 +1,236 @@
+{
+  "artifact_id": "demo-miracl-th-mini-v1",
+  "artifact_type": "run",
+  "claim_scope": "INTEGRATION_ONLY",
+  "data_kind": "SYNTHETIC_FIXTURE",
+  "evidence": [
+    {
+      "failure_category": "PASS",
+      "metrics": {},
+      "metrics_by_k": {
+        "1": {
+          "hit_rate_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_1": 1.0,
+          "precision_at_1": 1.0,
+          "recall_at_1": 1.0
+        },
+        "5": {
+          "hit_rate_at_5": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_5": 1.0,
+          "precision_at_5": 0.2,
+          "recall_at_5": 1.0
+        }
+      },
+      "record_ref": "1",
+      "relevant_document_ids": [
+        "d1"
+      ],
+      "retrieved_document_ids": [
+        "d1",
+        "d3",
+        "d2",
+        "d5",
+        "d4"
+      ],
+      "scores": [
+        69.363208259402,
+        22.503798519146,
+        16.139724297644,
+        8.338470201098,
+        7.718569744039
+      ]
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {},
+      "metrics_by_k": {
+        "1": {
+          "hit_rate_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_1": 1.0,
+          "precision_at_1": 1.0,
+          "recall_at_1": 1.0
+        },
+        "5": {
+          "hit_rate_at_5": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_5": 1.0,
+          "precision_at_5": 0.2,
+          "recall_at_5": 1.0
+        }
+      },
+      "record_ref": "2",
+      "relevant_document_ids": [
+        "d3"
+      ],
+      "retrieved_document_ids": [
+        "d3",
+        "d6",
+        "d5",
+        "d4",
+        "d1"
+      ],
+      "scores": [
+        94.831277597598,
+        8.543114132992,
+        2.060219702627,
+        1.753810953161,
+        1.475986962908
+      ]
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {},
+      "metrics_by_k": {
+        "1": {
+          "hit_rate_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_1": 1.0,
+          "precision_at_1": 1.0,
+          "recall_at_1": 0.5
+        },
+        "5": {
+          "hit_rate_at_5": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_5": 1.0,
+          "precision_at_5": 0.4,
+          "recall_at_5": 1.0
+        }
+      },
+      "record_ref": "3",
+      "relevant_document_ids": [
+        "d1",
+        "d3"
+      ],
+      "retrieved_document_ids": [
+        "d3",
+        "d1",
+        "d2",
+        "d6",
+        "d4"
+      ],
+      "scores": [
+        80.028845175949,
+        36.495825442585,
+        6.876804801526,
+        4.077111676045,
+        3.418520359889
+      ]
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {},
+      "metrics_by_k": {
+        "1": {
+          "hit_rate_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_1": 1.0,
+          "precision_at_1": 1.0,
+          "recall_at_1": 1.0
+        },
+        "5": {
+          "hit_rate_at_5": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_5": 1.0,
+          "precision_at_5": 0.2,
+          "recall_at_5": 1.0
+        }
+      },
+      "record_ref": "4",
+      "relevant_document_ids": [
+        "d4"
+      ],
+      "retrieved_document_ids": [
+        "d4",
+        "d1",
+        "d5",
+        "d2",
+        "d3"
+      ],
+      "scores": [
+        88.528985633528,
+        5.439724759816,
+        3.180840920042,
+        2.725009100698,
+        2.389372553572
+      ]
+    },
+    {
+      "failure_category": "PASS",
+      "metrics": {},
+      "metrics_by_k": {
+        "1": {
+          "hit_rate_at_1": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_1": 1.0,
+          "precision_at_1": 1.0,
+          "recall_at_1": 1.0
+        },
+        "5": {
+          "hit_rate_at_5": 1.0,
+          "mrr": 1.0,
+          "ndcg_at_5": 1.0,
+          "precision_at_5": 0.2,
+          "recall_at_5": 1.0
+        }
+      },
+      "record_ref": "5",
+      "relevant_document_ids": [
+        "d2"
+      ],
+      "retrieved_document_ids": [
+        "d2",
+        "d5",
+        "d1",
+        "d6",
+        "d4"
+      ],
+      "scores": [
+        65.28834139415,
+        45.134940727644,
+        10.407829319608,
+        10.039343501349,
+        5.404237531223
+      ]
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "BM25 is a local deterministic baseline; no model-superiority claim is supported.",
+    "Synthetic MIRACL-shaped Thai mini fixture; not official MIRACL benchmark data or a leaderboard result."
+  ],
+  "metrics": {
+    "hit_rate_at_5": 1.0,
+    "mrr": 1.0,
+    "ndcg_at_5": 1.0,
+    "precision_at_5": 0.24,
+    "recall_at_5": 1.0
+  },
+  "run": {
+    "benchmark": "miracl",
+    "dataset_name": "miracl-th-mini",
+    "dataset_revision": "synthetic-fixture-v1",
+    "dataset_version": "synthetic-fixture-v1",
+    "evaluation_type": "miracl_retrieval",
+    "evaluator_versions": {
+      "retrieval": "deterministic-metrics-v1"
+    },
+    "git_commit": null,
+    "language": "th",
+    "model": null,
+    "model_provider": null,
+    "random_seed": null,
+    "retriever": "bm25",
+    "retriever_version": "bm25-local-v1",
+    "run_id": "demo-miracl-th-mini-v1",
+    "split": "dev",
+    "system_name": "evalops-bm25-mini",
+    "timestamp": "2026-01-15T12:00:00Z",
+    "tokenization_strategy": "thai-character-bigrams-trigrams-latin-runs",
+    "top_k": 5
+  },
+  "schema_version": "public-evidence-v1",
+  "verification_status": "VERIFIED"
+}

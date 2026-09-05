@@ -58,6 +58,14 @@ Use `apply_patch` for source edits. Keep changes small and reviewable.
 - Synthetic fixtures must be clearly labeled and must not be presented as benchmark results.
 - Do not add paid infrastructure, external API calls, vector databases, or provider credentials to local tests.
 
+## Frontend Evidence Console rules
+
+- The `apps/web` app is a static export and may read only the explicit checked-in `public/evidence/index.json` and artifact files named by that index.
+- Keep the public Zod mirror strict and fail closed; never expose raw details, responses, prompts, corpus text, hidden reasoning, paths, or secrets.
+- Preserve `SYNTHETIC_FIXTURE` and `INTEGRATION_ONLY` labels in the UI; synthetic MIRACL-shaped data is never an official benchmark result.
+- Do not add API routes, server actions, model/provider inference, external fetches, authentication, persistence, analytics, or deployment configuration in Phase 2.
+- Frontend changes require npm lint, typecheck, unit tests, static build, Playwright/axe checks, and reviewed screenshots in `docs/screenshots/evidence-console/`.
+
 ## Required validation before completion
 
 Run the full applicable suite: `pytest`, `ruff check .`, `ruff format --check .`, and `mypy src`. Manually exercise the CLI with included fixtures. Inspect `git status` and `git diff --check`. Report limitations honestly; use `UNVERIFIED` or `PLANNED` when evidence is unavailable.
