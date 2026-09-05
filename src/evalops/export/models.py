@@ -41,6 +41,12 @@ class ClaimScope(StrEnum):
     BENCHMARK_RESULT = "BENCHMARK_RESULT"
 
 
+class PopulationCompatibility(StrEnum):
+    MATCHED = "MATCHED"
+    UNVERIFIED = "UNVERIFIED"
+    INCOMPATIBLE = "INCOMPATIBLE"
+
+
 class PublicArtifactIdentityBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -247,7 +253,7 @@ class PublicComparisonArtifactV1(PublicEvidenceArtifactBase):
     candidate_run_id: str | None = None
     passed: bool
     comparisons: list[PublicComparisonMetric] = Field(default_factory=list)
-    population_compatibility: str | None = None
+    population_compatibility: PopulationCompatibility = PopulationCompatibility.UNVERIFIED
 
     @field_validator(
         "baseline_artifact_id",
@@ -260,11 +266,6 @@ class PublicComparisonArtifactV1(PublicEvidenceArtifactBase):
         if value is None:
             return None
         return safe_identifier(value, field=getattr(info, "field_name", "artifact_id"))
-
-    @field_validator("population_compatibility")
-    @classmethod
-    def validate_population_compatibility(cls, value: str | None) -> str | None:
-        return safe_optional_text(value, field="population_compatibility")
 
     @model_validator(mode="after")
     def validate_not_self_comparison(self) -> Self:

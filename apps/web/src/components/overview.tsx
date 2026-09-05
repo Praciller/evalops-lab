@@ -5,11 +5,12 @@ import { EvidenceLayout } from "@/components/evidence-layout";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evidence/format";
-import { getApprovedRunArtifacts, getEvidenceIndex } from "@/lib/evidence/repository";
+import { getApprovedComparisonBundles, getApprovedRunArtifacts, getEvidenceIndex } from "@/lib/evidence/repository";
 
 export function Overview() {
   const index = getEvidenceIndex();
   const runs = getApprovedRunArtifacts(index);
+  const comparisons = getApprovedComparisonBundles(index);
   const headlineMetrics = runs.flatMap((run) =>
     Object.entries(run.metrics).slice(0, 3).map(([name, value]) => ({
       name,
@@ -48,6 +49,26 @@ export function Overview() {
               {runs.map((run) => <tr key={run.artifact_id}><th scope="row"><Link className="focus-ring rounded font-mono text-xs font-semibold text-accent underline-offset-4 hover:underline" href={`/runs/${run.artifact_id}`}>{run.artifact_id}</Link><span className="mt-1 block text-xs font-normal text-muted">{humanizeLabel(run.run.evaluation_type)}</span></th><td><span className="font-medium">{run.run.dataset_name}</span><span className="mt-1 block text-xs text-muted">{run.run.dataset_version}</span></td><td><ArtifactBadges artifact={run} /></td><td><div className="space-y-1 text-xs">{Object.entries(run.metrics).slice(0, 3).map(([key, value]) => <div key={key}><span className="text-muted">{humanizeMetricName(key)}</span> <span className="font-mono font-semibold">{formatMetricValue(value)}</span></div>)}</div></td><td><Link className="focus-ring inline-flex rounded-md text-sm font-semibold text-accent underline-offset-4 hover:underline" href={`/runs/${run.artifact_id}`}>Inspect <span aria-hidden="true">→</span></Link></td></tr>)}
             </tbody></table></div>
           </Card>
+        </section>
+
+        <section aria-labelledby="comparisons-title">
+          <div className="mb-4"><p className="eyebrow">Regression evidence</p><h2 id="comparisons-title" className="section-title">Regression evidence</h2></div>
+          <div className="grid gap-4">
+            {comparisons.map(({ comparison, baseline, candidate }) => {
+              const regressionCount = comparison.comparisons.filter((row) => row.status === "REGRESSION").length;
+              const passCount = comparison.comparisons.filter((row) => row.status === "PASS").length;
+              return (
+                <Card className="p-5" key={comparison.artifact_id}>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div><Link className="focus-ring rounded font-mono text-sm font-semibold text-accent underline underline-offset-4 hover:no-underline" href={`/comparisons/${comparison.artifact_id}`}>{comparison.artifact_id}</Link><p className="mt-2 text-sm text-muted">Synthetic same-population regression demonstration; not a benchmark or model-superiority result.</p></div>
+                    <span className={comparison.passed ? "font-semibold text-success" : "font-semibold text-danger"}>{comparison.passed ? "Comparison passed" : "Regression detected"}</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs uppercase tracking-[0.1em] text-muted">Reference</p><Link className="focus-ring rounded font-mono text-xs text-accent underline underline-offset-4 hover:no-underline" href={`/runs/${baseline.artifact_id}`}>{baseline.artifact_id}</Link></div><div><p className="text-xs uppercase tracking-[0.1em] text-muted">Candidate</p><Link className="focus-ring rounded font-mono text-xs text-accent underline underline-offset-4 hover:no-underline" href={`/runs/${candidate.artifact_id}`}>{candidate.artifact_id}</Link></div><div><p className="text-xs uppercase tracking-[0.1em] text-muted">Metrics</p><span className="text-muted">{regressionCount} regression · {passCount} pass · </span><span className="font-semibold text-success">{comparison.population_compatibility}</span></div></div>
+                  <div className="mt-4"><ArtifactBadges artifact={comparison} /></div>
+                </Card>
+              );
+            })}
+          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2" aria-labelledby="boundary-title">

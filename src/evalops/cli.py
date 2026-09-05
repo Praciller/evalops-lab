@@ -34,6 +34,7 @@ from evalops.evaluators.hallucination.interface import HallucinationEvaluator
 from evalops.export import (
     ClaimScope,
     DataKind,
+    PopulationCompatibility,
     PublicArtifact,
     VerificationStatus,
     adapt_evaluation_result,
@@ -214,7 +215,11 @@ def _build_parser() -> argparse.ArgumentParser:
     evidence_export.add_argument("--limitation", action="append", default=[])
     evidence_export.add_argument("--baseline-artifact-id")
     evidence_export.add_argument("--candidate-artifact-id")
-    evidence_export.add_argument("--population-compatibility")
+    evidence_export.add_argument(
+        "--population-compatibility",
+        choices=[status.value for status in PopulationCompatibility],
+        default=PopulationCompatibility.UNVERIFIED.value,
+    )
     evidence_index = evidence_commands.add_parser(
         "index", help="Index an explicit list of already-approved public artifacts."
     )
@@ -548,7 +553,7 @@ def _evidence_export(args: argparse.Namespace) -> int:
                 source,
                 baseline_artifact_id=args.baseline_artifact_id,
                 candidate_artifact_id=args.candidate_artifact_id,
-                population_compatibility=args.population_compatibility,
+                population_compatibility=PopulationCompatibility(args.population_compatibility),
                 **common,
             )
         _write_public_artifact_json(artifact, args.output)

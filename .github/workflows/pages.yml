@@ -14,8 +14,9 @@ on:
       - "src/evalops/export/**"
       - "src/evalops/failures/**"
       - "src/evalops/models/retrieval.py"
-      - "src/evalops/models/runs.py"
       - "src/evalops/runners/retrieval.py"
+      - "src/evalops/regression/**"
+      - "src/evalops/models/runs.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -59,7 +60,10 @@ jobs:
         run: |
           test -f out/index.html
           test -f out/runs/demo-retrieval-fixture-v1/index.html
+          test -f out/runs/demo-retrieval-reference-v1/index.html
           test -f out/runs/demo-miracl-th-mini-v1/index.html
+          test -f out/comparisons/demo-retrieval-regression-v1/index.html
+          test -f out/comparisons/demo-retrieval-regression-v1/failures/index.html
           test ! -d out/reports
           test ! -d out/datasets
       - name: Configure GitHub Pages

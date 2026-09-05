@@ -7,12 +7,14 @@ from pydantic import ValidationError
 from evalops.export import (
     ClaimScope,
     DataKind,
+    PopulationCompatibility,
     VerificationStatus,
     adapt_evaluation_result,
     adapt_regression_report,
     build_public_index,
     serialize_public_artifact,
 )
+from evalops.export.compatibility import assess_population_compatibility
 
 
 def _run_payload() -> dict[str, object]:
@@ -73,12 +75,16 @@ def _artifact(
     payload: dict[str, object] | None = None,
     *,
     artifact_id: str = "run-fixture-v1",
+    run_id: str | None = None,
     verification_status: VerificationStatus = VerificationStatus.VERIFIED,
     data_kind: DataKind = DataKind.SYNTHETIC_FIXTURE,
     claim_scope: ClaimScope = ClaimScope.INTEGRATION_ONLY,
 ):
+    source = payload or _run_payload()
+    if run_id is not None:
+        source = source | {"run": source["run"] | {"run_id": run_id}}
     return adapt_evaluation_result(
-        payload or _run_payload(),
+        source,
         artifact_id=artifact_id,
         verification_status=verification_status,
         data_kind=data_kind,
@@ -95,6 +101,7 @@ def _comparison_artifact(
     verification_status: VerificationStatus = VerificationStatus.VERIFIED,
     data_kind: DataKind = DataKind.SYNTHETIC_FIXTURE,
     claim_scope: ClaimScope = ClaimScope.INTEGRATION_ONLY,
+    population_compatibility: PopulationCompatibility = PopulationCompatibility.UNVERIFIED,
 ):
     return adapt_regression_report(
         {
@@ -119,6 +126,7 @@ def _comparison_artifact(
         verification_status=verification_status,
         data_kind=data_kind,
         claim_scope=claim_scope,
+        population_compatibility=population_compatibility,
     )
 
 
@@ -285,9 +293,10 @@ def test_comparison_rejects_self_comparison() -> None:
 
 
 def test_mixed_index_preserves_child_claim_dimensions_without_catalog_claims() -> None:
-    synthetic = _artifact(artifact_id="synthetic-run-v1")
+    synthetic = _artifact(artifact_id="synthetic-run-v1", run_id="baseline-v1")
     official = _artifact(
         artifact_id="official-run-v1",
+        run_id="candidate-v1",
         verification_status=VerificationStatus.UNVERIFIED,
         data_kind=DataKind.OFFICIAL_BENCHMARK,
         claim_scope=ClaimScope.BENCHMARK_RESULT,
@@ -300,15 +309,61 @@ def test_mixed_index_preserves_child_claim_dimensions_without_catalog_claims() -
         claim_scope=ClaimScope.PROTOCOL_SPECIFIC,
     )
 
-    index = build_public_index([comparison, official, synthetic])
-    summaries = {item.artifact_id: item for item in index.artifacts}
+    with pytest.raises(ValueError, match="data_kind"):
+        build_public_index([comparison, official, synthetic])
 
-    assert summaries["synthetic-run-v1"].data_kind is DataKind.SYNTHETIC_FIXTURE
-    assert summaries["synthetic-run-v1"].claim_scope is ClaimScope.INTEGRATION_ONLY
-    assert summaries["official-run-v1"].data_kind is DataKind.OFFICIAL_BENCHMARK
-    assert summaries["official-run-v1"].claim_scope is ClaimScope.BENCHMARK_RESULT
-    assert summaries["comparison-v1"].data_kind is DataKind.CURATED_DATASET
-    assert summaries["comparison-v1"].claim_scope is ClaimScope.PROTOCOL_SPECIFIC
+
+def test_population_compatibility_is_typed_and_same_population_matches() -> None:
+    baseline = _artifact(artifact_id="baseline-run-v1", run_id="baseline-v1")
+    candidate = _artifact(artifact_id="candidate-run-v1")
+
+    assert assess_population_compatibility(baseline, candidate) is PopulationCompatibility.MATCHED
+
+
+def test_population_mismatch_is_incompatible() -> None:
+    baseline = _artifact(artifact_id="baseline-run-v1", run_id="baseline-v1")
+    candidate = _artifact(
+        _run_payload() | {"run": _run_payload()["run"] | {"dataset_version": "synthetic-v2"}},
+        artifact_id="candidate-run-v1",
+    )
+
+    assert (
+        assess_population_compatibility(baseline, candidate) is PopulationCompatibility.INCOMPATIBLE
+    )
+
+
+def test_index_rejects_matched_comparison_when_population_differs() -> None:
+    baseline = _artifact(artifact_id="baseline-run-v1", run_id="baseline-v1")
+    candidate = _artifact(
+        _run_payload() | {"run": _run_payload()["run"] | {"top_k": 10}},
+        artifact_id="candidate-run-v1",
+        run_id="candidate-v1",
+    )
+    comparison = _comparison_artifact(
+        baseline_artifact_id=baseline.artifact_id,
+        candidate_artifact_id=candidate.artifact_id,
+        population_compatibility=PopulationCompatibility.MATCHED,
+    )
+
+    with pytest.raises(ValueError, match="population compatibility"):
+        build_public_index([baseline, candidate, comparison])
+
+
+def test_index_rejects_comparison_claim_stronger_than_operand() -> None:
+    baseline = _artifact(
+        artifact_id="baseline-run-v1",
+        run_id="baseline-v1",
+        verification_status=VerificationStatus.PARTIAL,
+    )
+    candidate = _artifact(artifact_id="candidate-run-v1", run_id="candidate-v1")
+    comparison = _comparison_artifact(
+        baseline_artifact_id=baseline.artifact_id,
+        candidate_artifact_id=candidate.artifact_id,
+        verification_status=VerificationStatus.VERIFIED,
+    )
+
+    with pytest.raises(ValueError, match="verification"):
+        build_public_index([baseline, candidate, comparison])
 
 
 def test_regression_adapter_preserves_standard_comparison_fields() -> None:

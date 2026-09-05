@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parsePublicEvidenceIndex,
+  parsePublicComparisonArtifact,
   parsePublicRunArtifact,
 } from "@/lib/evidence/schemas";
 
@@ -16,6 +17,12 @@ function readJson(file: string) {
 
 function readRunArtifact() {
   return readJson("artifacts/demo-retrieval-fixture-v1.json") as Record<string, unknown>;
+}
+
+function readComparisonArtifact() {
+  return readJson("artifacts/demo-retrieval-regression-v1.json") as Record<string, unknown> & {
+    comparisons: Array<Record<string, unknown>>;
+  };
 }
 
 function readIndex() {
@@ -47,20 +54,44 @@ function withArtifacts(artifacts: Array<Record<string, unknown>>) {
 }
 
 describe("Public Evidence Contract V1 mirror", () => {
-  it("parses the checked-in explicit index and both run artifacts", () => {
+  it("parses the checked-in explicit index, three runs, and one comparison", () => {
     const index = parsePublicEvidenceIndex(readJson("index.json"));
     expect(index.catalog_status).toBe("EXPLICIT_ALLOWLIST");
-    expect(index.artifacts).toHaveLength(2);
+    expect(index.artifacts).toHaveLength(4);
 
-    for (const summary of index.artifacts) {
+    const runSummaries = index.artifacts.filter((artifact) => artifact.artifact_type === "run");
+    expect(runSummaries).toHaveLength(3);
+    for (const summary of runSummaries) {
       expect(parsePublicRunArtifact(readJson(`artifacts/${summary.artifact_id}.json`)).artifact_id).toBe(summary.artifact_id);
     }
+    const comparisonSummary = index.artifacts.find((artifact) => artifact.artifact_type === "comparison");
+    expect(comparisonSummary?.artifact_id).toBe("demo-retrieval-regression-v1");
+    expect(parsePublicComparisonArtifact(readJson("artifacts/demo-retrieval-regression-v1.json")).artifact_id).toBe("demo-retrieval-regression-v1");
+  });
+
+  it("parses the checked-in full comparison artifact", () => {
+    const artifact = parsePublicComparisonArtifact(readComparisonArtifact());
+    expect(artifact.population_compatibility).toBe("MATCHED");
+    expect(artifact.passed).toBe(false);
+    expect(artifact.comparisons.filter((item) => item.status === "REGRESSION")).toHaveLength(4);
   });
 
   it("rejects unsupported schemas and arbitrary internal details", () => {
     const artifact = readJson("artifacts/demo-retrieval-fixture-v1.json") as Record<string, unknown>;
     expect(() => parsePublicRunArtifact({ ...artifact, schema_version: "public-evidence-v2" })).toThrow("Evidence unavailable");
     expect(() => parsePublicRunArtifact({ ...artifact, details: { raw_response: "hidden" } })).toThrow("Evidence unavailable");
+  });
+
+  it.each([
+    ["unexpected comparison field", { unexpected: true }],
+    ["unknown compatibility", { population_compatibility: "SAMEISH" }],
+    ["unknown direction", { comparisons: [{ ...readComparisonArtifact().comparisons[0], direction: "sideways" }] }],
+    ["unknown status", { comparisons: [{ ...readComparisonArtifact().comparisons[0], status: "WARN" }] }],
+    ["not-run comparison", { verification_status: "NOT_RUN" }],
+    ["synthetic benchmark claim", { claim_scope: "BENCHMARK_RESULT" }],
+    ["self comparison", { candidate_artifact_id: "demo-retrieval-reference-v1" }],
+  ])("rejects full comparison %s", (_label, overrides) => {
+    expect(() => parsePublicComparisonArtifact({ ...readComparisonArtifact(), ...overrides })).toThrow("Evidence unavailable");
   });
 
   it.each([

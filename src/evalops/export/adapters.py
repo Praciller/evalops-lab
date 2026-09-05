@@ -7,9 +7,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from evalops.export.compatibility import validate_comparison_operands
 from evalops.export.models import (
     ClaimScope,
     DataKind,
+    PopulationCompatibility,
     PublicArtifact,
     PublicArtifactSummary,
     PublicComparisonArtifactV1,
@@ -220,7 +222,9 @@ def adapt_regression_report(
     data_kind: DataKind,
     claim_scope: ClaimScope,
     limitations: Sequence[str] = (),
-    population_compatibility: str | None = None,
+    baseline_run_id: str | None = None,
+    candidate_run_id: str | None = None,
+    population_compatibility: PopulationCompatibility = PopulationCompatibility.UNVERIFIED,
 ) -> PublicComparisonArtifactV1:
     """Normalize only the standard metric regression report for public use."""
 
@@ -245,8 +249,10 @@ def adapt_regression_report(
         )
         for comparison in sorted(report.comparisons, key=lambda item: item.metric_name)
     ]
-    baseline_run_id = source.get("baseline_run_id") if isinstance(source, Mapping) else None
-    candidate_run_id = source.get("candidate_run_id") if isinstance(source, Mapping) else None
+    if baseline_run_id is None and isinstance(source, Mapping):
+        baseline_run_id = source.get("baseline_run_id")
+    if candidate_run_id is None and isinstance(source, Mapping):
+        candidate_run_id = source.get("candidate_run_id")
     return PublicComparisonArtifactV1(
         artifact_id=artifact_id,
         verification_status=verification_status,
@@ -314,6 +320,13 @@ def build_public_index(artifacts: Sequence[PublicArtifact]) -> PublicEvidenceInd
                 raise ValueError(
                     "comparison references must reference a run artifact in the same index"
                 )
+        baseline = artifact_by_id.get(artifact.baseline_artifact_id)
+        candidate = artifact_by_id.get(artifact.candidate_artifact_id)
+        if not isinstance(baseline, PublicRunArtifactV1) or not isinstance(
+            candidate, PublicRunArtifactV1
+        ):
+            raise ValueError("comparison references must reference run artifacts")
+        validate_comparison_operands(artifact, baseline, candidate)
     return PublicEvidenceIndexV1(
         artifact_id="public-evidence-index-v1",
         artifacts=sorted(summaries, key=lambda item: item.artifact_id),
