@@ -211,7 +211,7 @@ GET   /api/v1/health
 - [ ] Map internal exceptions to safe structured responses `{ "error": { "code", "message", "field", "retryable" } }`; never serialize tracebacks.
 - [ ] Serve an explicit `static_dir` when present and use SPA fallback for non-API GET routes; `/api/*` must never fall through to `index.html`.
 - [ ] Implement `run_workspace_command()` to resolve the default root (`Path.home() / ".evalops"` only in product runtime), allocate/validate a loopback port, create nonce/session manager, start Uvicorn with host `127.0.0.1`, and open `/#bootstrap=<nonce>` unless `--no-open`.
-- [ ] Ensure startup logging never prints the bootstrap fragment/token. It may print the safe base URL and a message that a browser was opened.
+- [ ] By default, open the browser automatically and never print the bootstrap fragment/token. If the user explicitly passes `--no-open`, print the one-time bootstrap URL exactly once to the interactive console as the only supported manual handoff; never persist it, repeat it in ordinary logs, include it in structured logs, or write it to disk.
 - [ ] Run API, CLI, storage, security tests until green.
 - [ ] Commit: `feat(workspace): add authenticated localhost API shell`.
 
