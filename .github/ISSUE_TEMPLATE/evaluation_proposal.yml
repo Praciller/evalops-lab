@@ -1,0 +1,58 @@
+name: Evaluation proposal
+description: Propose a bounded, evidence-backed evaluation capability or change.
+title: "proposal: "
+labels:
+  - evaluation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposals must preserve deterministic evaluation, explicit claim boundaries, and the distinction between `SYNTHETIC_FIXTURE`, `INTEGRATION_ONLY`, and official benchmark evidence. Do not use this form to request unsupported model-superiority claims.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and evaluation question
+      description: What problem needs evidence, and what question should the evaluation answer?
+      placeholder: State the evaluation question and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: intended_evidence
+    attributes:
+      label: Intended evidence or capability
+      description: What inspectable capability, artifact, metric, failure analysis, or decision should result?
+      placeholder: Describe the evidence a reviewer should be able to inspect.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_scope
+    attributes:
+      label: Proposed scope
+      description: Define the smallest repository surfaces, datasets, fixtures, and non-goals.
+      placeholder: Include affected paths and explicit non-goals.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Evaluator, metric, public-contract, or UI impact
+      description: Explain which evaluator/metric, public evidence schema, export boundary, CLI, or UI would change.
+      placeholder: Identify the affected contract and compatibility considerations.
+    validations:
+      required: true
+  - type: textarea
+    id: claim_implications
+    attributes:
+      label: Expected claim implications
+      description: What may the resulting evidence support, and what must it not claim? State whether evidence is synthetic, integration-only, or official.
+      placeholder: Describe bounded supported claims and explicit limitations.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_evidence
+    attributes:
+      label: Acceptance evidence
+      description: List the tests, fixtures, artifacts, screenshots, CI checks, or review evidence that would establish acceptance.
+      placeholder: List concrete verification commands and expected evidence.
+    validations:
+      required: true
