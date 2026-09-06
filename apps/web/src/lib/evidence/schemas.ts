@@ -55,6 +55,7 @@ const ClaimScope = z.enum(["INTEGRATION_ONLY", "PROTOCOL_SPECIFIC", "BENCHMARK_R
 const MetricDirection = z.enum(["higher_is_better", "lower_is_better"]);
 const RegressionStatus = z.enum(["PASS", "REGRESSION", "MISSING"]);
 export const PopulationCompatibility = z.enum(["MATCHED", "UNVERIFIED", "INCOMPATIBLE"]);
+export type PopulationCompatibility = z.infer<typeof PopulationCompatibility>;
 
 const ClaimFields = {
   verification_status: VerificationStatus,

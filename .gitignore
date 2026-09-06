@@ -32,7 +32,10 @@ dist/
 Thumbs.db
 .next/
 out/
+apps/web/storybook-static/
+apps/web/storybook-public-static/
 node_modules/
+.worktrees/
 *.tsbuildinfo
 playwright-report/
 test-results/

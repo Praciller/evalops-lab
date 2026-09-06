@@ -3,6 +3,7 @@ name: Web Evidence Console CI
 on:
   push:
     paths:
+      - "DESIGN.md"
       - "apps/web/**"
       - "docs/screenshots/evidence-console/**"
       - "scripts/generate_public_demo_evidence.py"
@@ -18,6 +19,7 @@ on:
       - ".github/workflows/web-ci.yml"
   pull_request:
     paths:
+      - "DESIGN.md"
       - "apps/web/**"
       - "docs/screenshots/evidence-console/**"
       - "scripts/generate_public_demo_evidence.py"
@@ -52,6 +54,10 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
+      - run: npm run storybook:build
+      - run: npm run storybook:build:public
+      - run: node scripts/verify-public-storybook.mjs
       - run: npx playwright install --with-deps chromium
+      - run: npm run storybook:test
+      - run: npm run build
       - run: npm run test:e2e
