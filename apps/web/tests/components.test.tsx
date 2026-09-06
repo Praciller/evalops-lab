@@ -11,9 +11,10 @@ import { RunDetail } from "@/components/run-detail";
 import { ProductHeader } from "@/components/shell/product-header";
 import { EvidenceLayout } from "@/components/evidence-layout";
 import { RunCatalog } from "@/components/catalog/run-catalog";
+import { ComparisonCatalog } from "@/components/catalog/comparison-catalog";
 import { ArtifactBadges } from "@/components/status-badges";
 import { getComparisonBundle, getRunArtifact } from "@/lib/evidence/repository";
-import { getRunCatalogItems } from "@/lib/evidence/catalog";
+import { getComparisonCatalogItems, getRunCatalogItems } from "@/lib/evidence/catalog";
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
@@ -99,6 +100,34 @@ describe("Evidence Console components", () => {
 
     expect(screen.getByText("No evidence matches these filters.")).toBeInTheDocument();
     expect(screen.queryByText("No public artifacts exist.")).not.toBeInTheDocument();
+  });
+
+  it("renders comparison identity, compatibility, aggregate result, and detail links", () => {
+    render(<ComparisonCatalog comparisons={getComparisonCatalogItems()} />);
+
+    expect(screen.getByRole("heading", { name: "Comparisons" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "demo-retrieval-regression-v1" })).toBeInTheDocument();
+    expect(screen.getByText("demo-retrieval-reference-v1")).toBeInTheDocument();
+    expect(screen.getByText("demo-retrieval-fixture-v1")).toBeInTheDocument();
+    expect(screen.getByText(/Population: MATCHED/)).toBeInTheDocument();
+    expect(screen.getByText("REGRESSION")).toBeInTheDocument();
+    expect(screen.getByText("4 regression rows")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Explore record changes/ })).toHaveAttribute(
+      "href",
+      "/comparisons/demo-retrieval-regression-v1/failures/",
+    );
+  });
+
+  it("filters comparisons by population and aggregate result", () => {
+    mockedUsePathname.mockReturnValue("/comparisons/");
+    mockedUseSearchParams.mockReturnValue(
+      new URLSearchParams("population=MATCHED&result=REGRESSION") as ReturnType<typeof useSearchParams>,
+    );
+    render(<ComparisonCatalog comparisons={getComparisonCatalogItems()} />);
+
+    expect(screen.getByRole("link", { name: "demo-retrieval-regression-v1" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Population" })).toHaveValue("MATCHED");
+    expect(screen.getByRole("combobox", { name: "Result" })).toHaveValue("REGRESSION");
   });
 
   it("renders overview identity, catalog summary, and safe run links", () => {
