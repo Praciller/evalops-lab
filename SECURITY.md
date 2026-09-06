@@ -6,7 +6,7 @@ Security fixes are scoped to the latest `main` and the latest published mileston
 
 ## Reporting a vulnerability
 
-Do not use a public GitHub issue for an undisclosed vulnerability. Private Vulnerability Reporting has not yet been enabled and verified for this repository; this policy does not invent an email address or alternative private channel. Until that owner-controlled capability is verified, report the limitation to the repository owner through an already trusted private channel.
+Do not use a public GitHub issue for an undisclosed vulnerability. Private Vulnerability Reporting is enabled for this repository; use GitHub's **Report a vulnerability** flow on the repository Security/Advisories surface to submit a private report to the maintainer.
 
 Please avoid including secrets or private evidence in any report that is not private.
 
