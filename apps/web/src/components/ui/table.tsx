@@ -2,9 +2,10 @@ import type { HTMLAttributes, TableHTMLAttributes } from "react";
 
 import { cn } from "@/lib/utils";
 
-export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>) {
+export function Table({ className, containerProps, ...props }: TableHTMLAttributes<HTMLTableElement> & { containerProps?: HTMLAttributes<HTMLDivElement> }) {
+  const { className: containerClassName, ...restContainerProps } = containerProps ?? {};
   return (
-    <div className="table-scroll">
+    <div className={cn("table-scroll", containerClassName)} {...restContainerProps}>
       <table className={cn("data-table", className)} {...props} />
     </div>
   );

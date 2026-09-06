@@ -137,6 +137,8 @@ describe("Evidence Console components", () => {
     expect(screen.getAllByRole("link", { name: /demo-retrieval-fixture-v1/ }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Regression evidence" })).toBeInTheDocument();
     expect(screen.getAllByText("SYNTHETIC_FIXTURE", { exact: false })).toHaveLength(4);
+    expect(screen.getByRole("link", { name: "Browse all runs" })).toHaveAttribute("href", "/runs/");
+    expect(screen.getByRole("link", { name: "Browse all comparisons" })).toHaveAttribute("href", "/comparisons/");
   });
 
   it("renders comparison verdict, operand links, and metric statuses", () => {
@@ -147,6 +149,8 @@ describe("Evidence Console components", () => {
     expect(screen.getByText(/Population compatibility: MATCHED/i)).toBeInTheDocument();
     expect(screen.getAllByText(/REGRESSION/)).toHaveLength(4);
     expect(screen.getByText(/2 matched records have a category transition or metric delta/)).toBeInTheDocument();
+    expect(screen.getAllByText("degradation exceeded allowance of 0.1")).toHaveLength(4);
+    expect(screen.getByText("within configured regression allowance")).toBeInTheDocument();
   });
 
   it("adds a bounded regression evidence section to the overview", () => {
@@ -163,6 +167,9 @@ describe("Evidence Console components", () => {
     expect(screen.getByText("THQA-002")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Persistent category" })).toBeInTheDocument();
     expect(screen.queryByText(/persistent system failure/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Stable pass").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Resolved failure").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Changed failure category").length).toBeGreaterThan(0);
   });
 
   it("filters to changed records and supports record search", () => {

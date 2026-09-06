@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-import { ArtifactBadges } from "@/components/status-badges";
+import { ArtifactBadges } from "@/components/evidence/evidence-badges";
 import { EvidenceLayout } from "@/components/evidence-layout";
 import { EvidenceTable, FailureSummary } from "@/components/evidence-table";
+import { MetricStat } from "@/components/evidence/metric-stat";
 import { LimitationsPanel, ProvenancePanel } from "@/components/provenance-panel";
-import { MetricCard } from "@/components/metric-card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evidence/format";
 import type { PublicRunArtifact } from "@/lib/evidence/schemas";
 
@@ -18,7 +19,7 @@ export function RunDetail({ artifact }: { artifact: PublicRunArtifact }) {
           <div className="surface p-4"><p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted">Artifact ID</p><p className="mt-2 break-all font-mono text-xs font-semibold text-ink">{artifact.artifact_id}</p><p className="mt-4 text-xs leading-5 text-muted">Claim scope: {humanizeLabel(artifact.claim_scope)}.</p></div>
         </section>
 
-        <section aria-labelledby="metrics-title"><div className="mb-4"><p className="eyebrow">Aggregate values</p><h2 id="metrics-title" className="section-title">Metrics</h2></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(artifact.metrics).map(([name, value]) => <MetricCard key={name} name={name} value={value} context={`k preserved in metric name · ${artifact.run.run_id}`} />)}</div></section>
+        <section aria-labelledby="metrics-title"><div className="mb-4"><p className="eyebrow">Aggregate values</p><h2 id="metrics-title" className="section-title">Metrics</h2></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(artifact.metrics).map(([name, value]) => <MetricStat key={name} label={name} value={value} context={`k preserved in metric name · ${artifact.run.run_id}`} />)}</div></section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_360px]" aria-label="Failure and provenance evidence"><FailureSummary failures={artifact.failures} evidenceCount={artifact.evidence.length} /><ProvenancePanel artifact={artifact} /></section>
         <EvidenceTable evidence={artifact.evidence} />
@@ -30,5 +31,5 @@ export function RunDetail({ artifact }: { artifact: PublicRunArtifact }) {
 }
 
 export function MetricTable({ artifact }: { artifact: PublicRunArtifact }) {
-  return <div className="overflow-x-auto"><table className="data-table"><caption className="sr-only">Exact aggregate metric values</caption><thead><tr><th scope="col">Metric</th><th scope="col">Value</th></tr></thead><tbody>{Object.entries(artifact.metrics).map(([name, value]) => <tr key={name}><th scope="row">{humanizeMetricName(name)}</th><td className="font-mono">{formatMetricValue(value)}</td></tr>)}</tbody></table></div>;
+  return <Table><caption className="sr-only">Exact aggregate metric values</caption><TableHeader><TableRow><TableHead>Metric</TableHead><TableHead>Value</TableHead></TableRow></TableHeader><TableBody>{Object.entries(artifact.metrics).map(([name, value]) => <TableRow key={name}><th scope="row">{humanizeMetricName(name)}</th><TableCell className="font-mono">{formatMetricValue(value)}</TableCell></TableRow>)}</TableBody></Table>;
 }
