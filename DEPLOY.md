@@ -128,6 +128,24 @@ commit `b4eda4394795aeaf83436ac406e50289f2f0bd1b`; final production routes
 were re-verified after the Phase 5B.2 merge. A pixel-for-pixel recapture at the
 final SHA was not performed.
 
+### Final canonical readback
+
+After the documentation closure PR [#41](https://github.com/Praciller/evalops-lab/pull/41),
+the canonical `main` commit is `168ba90fdf1b036d5c874949d5d5209120ca11fe`.
+EvalOps CI run `34036041914` and CodeQL run `34036041903` completed
+successfully at that SHA. The SHA-matched Pages run is `34036071846`, which
+completed successfully and ran the Pages-mode browser/static-output checks.
+The final Phase 5B recruiter presentation is therefore
+`COMPLETE_WITH_LIMITATIONS`: the README, production verification, metadata,
+governance record, and evidence boundaries are complete, but the planned
+milestone release gate is not re-run because `v0.1.0` already exists.
+
+The pre-existing `v0.1.0` tag resolves to `f50c725c13db58abf7a62c7b0f2d678539984a5f`
+and its published release predates Phase 5B. It remains unchanged; no tag or
+release was force-replaced. Phase 5B must not be described as the target of that
+existing release, and Issue #26 remains open for owner-level acceptance of this
+release limitation.
+
 ## Redeploy
 
 An eligible change pushed to `main` triggers `.github/workflows/pages.yml`. The workflow can also be started with `workflow_dispatch`.
