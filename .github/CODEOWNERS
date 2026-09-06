@@ -1,0 +1,9 @@
+* @Praciller
+/src/evalops/ @Praciller
+/src/evalops/export/ @Praciller
+/apps/web/ @Praciller
+/.github/workflows/ @Praciller
+/.github/CODEOWNERS @Praciller
+/CONTRIBUTING.md @Praciller
+/SECURITY.md @Praciller
+/LICENSE @Praciller
