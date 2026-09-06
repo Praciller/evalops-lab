@@ -57,8 +57,9 @@ export function ComparisonCatalog({ comparisons }: { comparisons: ComparisonCata
           <TableBody>
             {filteredComparisons.map((comparison) => (
               <TableRow key={comparison.artifact_id}>
-                <th scope="row" className="min-w-56 align-top"><Link className="focus-ring break-words rounded font-mono text-xs font-semibold text-accent underline-offset-4 hover:underline" href={`/comparisons/${comparison.artifact_id}/`}>{comparison.artifact_id}</Link><span className="mt-2 flex flex-wrap gap-2"><VerificationBadge status={comparison.verification_status} /><DataKindBadge dataKind={comparison.data_kind} /><ClaimScopeBadge scope={comparison.claim_scope} /></span></th>
+                <th scope="row" className="min-w-56 align-top"><Link className="focus-ring break-words rounded font-mono text-xs font-semibold text-accent underline-offset-4 hover:underline" href={`/comparisons/${comparison.artifact_id}/`}>{comparison.artifact_id}</Link></th>
                 <TableCell className="align-top"><p className="text-xs text-muted">Reference</p><Link className="focus-ring break-words rounded font-mono text-xs text-accent underline-offset-4 hover:underline" href={`/runs/${comparison.baseline_artifact_id}/`}>{comparison.baseline_artifact_id}</Link><p className="mt-3 text-xs text-muted">Candidate</p><Link className="focus-ring break-words rounded font-mono text-xs text-accent underline-offset-4 hover:underline" href={`/runs/${comparison.candidate_artifact_id}/`}>{comparison.candidate_artifact_id}</Link></TableCell>
+                <TableCell className="align-top"><div className="flex flex-wrap gap-2"><VerificationBadge status={comparison.verification_status} /><DataKindBadge dataKind={comparison.data_kind} /><ClaimScopeBadge scope={comparison.claim_scope} /></div></TableCell>
                 <TableCell className="align-top"><PopulationCompatibilityBadge status={comparison.population_compatibility} /></TableCell>
                 <TableCell className="align-top"><div className="flex flex-wrap items-center gap-2">{comparison.result ? <RegressionIndicator status={comparison.result} /> : <span className="badge badge-not-run">Unavailable</span>}<span className="text-xs text-muted">{comparison.regression_count} regression {comparison.regression_count === 1 ? "row" : "rows"}</span></div></TableCell>
                 <TableCell className="align-top"><Link className="focus-ring inline-flex rounded-md text-sm font-semibold text-accent underline-offset-4 hover:underline" href={`/comparisons/${comparison.artifact_id}/`}>Inspect comparison <span aria-hidden="true">→</span></Link><Link className="focus-ring mt-2 inline-flex rounded-md text-sm font-semibold text-accent underline-offset-4 hover:underline" href={`/comparisons/${comparison.artifact_id}/failures/`}>Explore record changes</Link></TableCell>
@@ -66,7 +67,7 @@ export function ComparisonCatalog({ comparisons }: { comparisons: ComparisonCata
             ))}
           </TableBody>
         </Table>
-      ) : <EmptyState kind="no_results" />}
+      ) : <EmptyState kind={comparisons.length ? "no_results" : "no_artifacts"} />}
     </div>
   );
 }

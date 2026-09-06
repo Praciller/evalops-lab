@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -102,6 +102,24 @@ describe("Evidence Console components", () => {
     expect(screen.queryByText("No public artifacts exist.")).not.toBeInTheDocument();
   });
 
+  it("renders no-artifacts when the Runs source catalog is empty", () => {
+    render(<RunCatalog runs={[]} />);
+
+    expect(screen.getByText("No public artifacts")).toBeInTheDocument();
+    expect(screen.queryByText("No evidence matches these filters.")).not.toBeInTheDocument();
+  });
+
+  it("ignores invalid Runs filters without hiding the source catalog", () => {
+    mockedUseSearchParams.mockReturnValue(
+      new URLSearchParams("verification=SUPER_VERIFIED&verification=PARTIAL") as ReturnType<typeof useSearchParams>,
+    );
+    render(<RunCatalog runs={getRunCatalogItems()} />);
+
+    expect(screen.getByRole("combobox", { name: "Verification" })).toHaveValue("");
+    expect(screen.getAllByRole("link", { name: /Inspect demo-/ })).toHaveLength(3);
+    expect(screen.queryByText("No evidence matches these filters.")).not.toBeInTheDocument();
+  });
+
   it("renders comparison identity, compatibility, aggregate result, and detail links", () => {
     render(<ComparisonCatalog comparisons={getComparisonCatalogItems()} />);
 
@@ -128,6 +146,29 @@ describe("Evidence Console components", () => {
     expect(screen.getByRole("link", { name: "demo-retrieval-regression-v1" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Population" })).toHaveValue("MATCHED");
     expect(screen.getByRole("combobox", { name: "Result" })).toHaveValue("REGRESSION");
+  });
+
+  it("aligns comparison headers and body cells by evidence meaning", () => {
+    render(<ComparisonCatalog comparisons={getComparisonCatalogItems()} />);
+    const table = screen.getByRole("table");
+    const headers = within(table).getAllByRole("columnheader");
+    const row = within(table).getAllByRole("row")[1];
+    const cells = within(row).getAllByRole("cell");
+
+    expect(headers).toHaveLength(6);
+    expect(within(row).getByRole("rowheader")).toHaveTextContent("demo-retrieval-regression-v1");
+    expect(cells).toHaveLength(5);
+    expect(cells[1]).toHaveTextContent("SYNTHETIC_FIXTURE");
+    expect(cells[2]).toHaveTextContent("Population: MATCHED");
+    expect(cells[3]).toHaveTextContent("REGRESSION");
+    expect(cells[4]).toHaveTextContent("Inspect comparison");
+  });
+
+  it("renders no-artifacts when the Comparisons source catalog is empty", () => {
+    render(<ComparisonCatalog comparisons={[]} />);
+
+    expect(screen.getByText("No public artifacts")).toBeInTheDocument();
+    expect(screen.queryByText("No evidence matches these filters.")).not.toBeInTheDocument();
   });
 
   it("renders overview identity, catalog summary, and safe run links", () => {

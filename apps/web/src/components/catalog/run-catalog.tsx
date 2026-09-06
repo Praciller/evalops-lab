@@ -70,7 +70,7 @@ export function RunCatalog({ runs }: { runs: RunCatalogItem[] }) {
             ))}
           </TableBody>
         </Table>
-      ) : <EmptyState kind="no_results" />}
+      ) : <EmptyState kind={runs.length ? "no_results" : "no_artifacts"} />}
     </div>
   );
 }
