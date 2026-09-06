@@ -84,6 +84,50 @@ Axe reported zero violations on all checked surfaces. At 390 px, the Overview, R
 
 This remains `SYNTHETIC_FIXTURE` + `INTEGRATION_ONLY` evidence. URL filters are presentation state only and cannot override artifact semantics. Phase 5A.2 adds no runtime API, inference, authentication, persistence, analytics, database, or external data-fetch path.
 
+## Phase 5B verification
+
+- **Phase 5B.1:** PR [#27](https://github.com/Praciller/evalops-lab/pull/27), merged commit `bfda0b165dda5dcdc6c9cf5532b8c2b051ebf085`.
+- **Phase 5B.2-A:** PR [#40](https://github.com/Praciller/evalops-lab/pull/40), merged commit `0cf7baa062f89d10990e6e330a55f8473e0931e0`.
+- **Accepted final `main`:** `0cf7baa062f89d10990e6e330a55f8473e0931e0`.
+- **Final-head checks:** EvalOps CI `34035285132`, Web Evidence Console CI `34035285108`, CodeQL `34035285164`, and Dependency Review `34035285137` — all successful on the Phase 5B.2-A head.
+- **Post-merge checks:** EvalOps CI `34035554745` and CodeQL `34035554744` — successful on the accepted `main` commit.
+- **Pages:** workflow run `34035570914` — successful with `headSha` equal to the accepted final `main` commit.
+- **Production verification:** `2026-09-06 20:21 +07:00` against the canonical Pages URL.
+
+Verified routes:
+
+- https://praciller.github.io/evalops-lab/
+- https://praciller.github.io/evalops-lab/runs/
+- https://praciller.github.io/evalops-lab/comparisons/
+- https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/
+- https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/
+- https://praciller.github.io/evalops-lab/storybook/
+
+The five Evidence Console routes returned HTTP 200, had zero axe violations,
+no root horizontal overflow at 390 px, and no unexpected external runtime
+requests. The public Storybook route had no root overflow and exposed the
+curated public story set without internal/debug titles. The public evidence
+remains `VERIFIED` / `SYNTHETIC_FIXTURE` / `INTEGRATION_ONLY`; it is not an
+official benchmark or model-superiority result.
+
+The active `main-governance` ruleset requires pull requests, resolved review
+threads, the `quality`, `web`, CodeQL, and `Dependency Review` checks, and
+squash-only merges. It blocks deletion and non-fast-forward updates; its
+required approval count is zero. Wiki and Discussions are disabled. Repository
+license is MIT. The recruiter metadata is synchronized as follows:
+
+- **Description:** `AI evaluation framework for RAG regression, failure analysis, and reproducible evidence.`
+- **Homepage:** https://praciller.github.io/evalops-lab/
+- **Topics:** `ai-evaluation`, `llm-evaluation`, `rag-evaluation`, `ai-engineering`, `reliability`, `testing`, `python`
+
+The README screenshots were not changed in Phase 5B.2 because the change was
+presentation/documentation-only and the public route output remained unchanged.
+The checked-in `overview-desktop.png`, `comparison-desktop.png`, and
+`failure-explorer-desktop.png` retain the Phase 5A.2 production provenance at
+commit `b4eda4394795aeaf83436ac406e50289f2f0bd1b`; final production routes
+were re-verified after the Phase 5B.2 merge. A pixel-for-pixel recapture at the
+final SHA was not performed.
+
 ## Redeploy
 
 An eligible change pushed to `main` triggers `.github/workflows/pages.yml`. The workflow can also be started with `workflow_dispatch`.
