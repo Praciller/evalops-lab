@@ -69,6 +69,73 @@ test("overview links to a static run detail with accessible evidence", async ({ 
   await expect(page).toHaveScreenshot("run-detail-desktop.png", { clip: desktopClip });
 });
 
+test("product shell navigates catalogs and marks the active app route", async ({ page }) => {
+  await page.goto(homePath);
+  await expect(page.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "Storybook", exact: true })).not.toHaveAttribute("aria-current", "page");
+
+  await page.getByRole("link", { name: "Runs", exact: true }).click();
+  await expect(page).toHaveURL(/\/runs\/$/);
+  await expect(page.getByRole("link", { name: "Runs", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Comparisons", exact: true }).click();
+  await expect(page).toHaveURL(/\/comparisons\/$/);
+  await expect(page.getByRole("link", { name: "Comparisons", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Comparisons" })).toBeVisible();
+});
+
+test("product shell remains usable at the mobile catalog breakpoint", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(homePath);
+  await expect(page.getByRole("link", { name: "Overview", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Storybook", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Dark theme" })).toBeVisible();
+  await page.screenshot({ path: path.join(screenshotsDir, "shell-mobile.png"), fullPage: true });
+  await expect(page).toHaveScreenshot("shell-mobile.png", { clip: mobileClip });
+});
+
+test("runs filters are URL-driven, reloadable, and history-safe", async ({ page }) => {
+  await page.goto(`${appBasePath}/runs/`);
+  const verification = page.getByRole("combobox", { name: "Verification" });
+  const dataKind = page.getByRole("combobox", { name: "Data kind" });
+  await verification.selectOption("VERIFIED");
+  await expect(page).toHaveURL(/\/runs\/\?verification=VERIFIED$/);
+  await dataKind.selectOption("SYNTHETIC_FIXTURE");
+  await expect(page).toHaveURL(/\/runs\/\?verification=VERIFIED&data=SYNTHETIC_FIXTURE$/);
+  await expect(page.locator(".data-table tbody tr")).toHaveCount(3);
+  await page.screenshot({ path: path.join(screenshotsDir, "runs-filtered-desktop.png"), fullPage: true });
+  await expect(page).toHaveScreenshot("runs-filtered-desktop.png", { clip: desktopClip });
+
+  await page.reload();
+  await expect(verification).toHaveValue("VERIFIED");
+  await expect(dataKind).toHaveValue("SYNTHETIC_FIXTURE");
+  await page.getByRole("button", { name: "Clear Verification filter" }).click();
+  await expect(page).toHaveURL(/\/runs\/\?data=SYNTHETIC_FIXTURE$/);
+  await page.getByRole("button", { name: "Clear all filters" }).click();
+  await expect(page).toHaveURL(/\/runs\/$/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/runs\/\?data=SYNTHETIC_FIXTURE$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/runs\/\?verification=VERIFIED&data=SYNTHETIC_FIXTURE$/);
+  await page.goForward();
+  await expect(page).toHaveURL(/\/runs\/\?data=SYNTHETIC_FIXTURE$/);
+});
+
+test("comparison filters preserve safe result semantics and ignore unknown values", async ({ page }) => {
+  await page.goto(`${appBasePath}/comparisons/?population=MATCHED&result=REGRESSION`);
+  await expect(page.getByRole("combobox", { name: "Population" })).toHaveValue("MATCHED");
+  await expect(page.getByRole("combobox", { name: "Result" })).toHaveValue("REGRESSION");
+  await expect(page.locator(".data-table tbody tr")).toHaveCount(1);
+  await expect(page.getByText("REGRESSION", { exact: true })).toBeVisible();
+
+  await page.goto(`${appBasePath}/comparisons/?verification=SUPER_VERIFIED`);
+  await expect(page.getByRole("heading", { name: "Comparisons" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Verification" })).toHaveValue("");
+  await expect(page.locator(".data-table tbody tr")).toHaveCount(1);
+});
+
 test("comparison detail is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
