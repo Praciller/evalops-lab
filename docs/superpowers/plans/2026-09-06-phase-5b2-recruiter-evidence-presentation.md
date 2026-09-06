@@ -801,11 +801,34 @@ Notes may summarize:
 - explicit evidence limitations;
 - live demo links.
 
-Include a clear limitation that current public comparison evidence is synthetic/integration-scoped and is not a production model-superiority benchmark.
+Include a clear limitation that current public comparison evidence is synthetic/integration-scoped and is not a production model-superiority benchmark. Save the reviewed notes to a temporary local file and keep it untracked:
+
+```bash
+RELEASE_NOTES_FILE=$(mktemp)
+cat > "$RELEASE_NOTES_FILE" <<'EOF'
+## Highlights
+- Reproducible AI evaluation core with deterministic retrieval metrics, failure analysis, and regression decisions.
+- Static read-only Evidence Console with allowlisted sanitized public artifacts.
+- Comparison and Failure Explorer evidence for the synthetic integration regression fixture.
+- Evidence Design System with curated public Storybook.
+- Repository governance and native GitHub security/dependency gates for a solo-maintained production workflow.
+
+## Evidence boundary
+The public reference/candidate comparison is `SYNTHETIC_FIXTURE` / `INTEGRATION_ONLY`. It validates the evaluation, regression, and failure-analysis pipeline; it is not an official benchmark or evidence of production model superiority.
+
+## Live evidence
+- Evidence Console: https://praciller.github.io/evalops-lab/
+- Regression comparison: https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/
+- Failure Explorer: https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/
+- Public Storybook: https://praciller.github.io/evalops-lab/storybook/
+EOF
+cat "$RELEASE_NOTES_FILE"
+test -s "$RELEASE_NOTES_FILE"
+```
 
 - [ ] **Step 5: Create the release targeting the exact accepted canonical main SHA**
 
-Use owner-authenticated GitHub tooling, e.g.:
+Use owner-authenticated GitHub tooling:
 
 ```bash
 FINAL_SHA=$(git rev-parse origin/main)
@@ -813,10 +836,10 @@ gh release create v0.1.0 \
   --repo Praciller/evalops-lab \
   --target "$FINAL_SHA" \
   --title "v0.1.0 — Recruiter-ready evidence-governed milestone" \
-  --notes-file <release-notes-file>
+  --notes-file "$RELEASE_NOTES_FILE"
 ```
 
-Use a temporary local notes file if needed; do not commit it unless useful documentation.
+Do not commit the temporary release-notes file unless it is deliberately promoted into durable documentation in a separately reviewed docs change.
 
 No Python/npm package publication is performed.
 

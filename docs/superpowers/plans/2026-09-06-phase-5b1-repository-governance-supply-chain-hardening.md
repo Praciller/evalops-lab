@@ -117,6 +117,20 @@ Also record whether private vulnerability reporting can be read/configured with 
 
 Expected pre-state based on the approved design review: public repo, Pages enabled, Wiki currently enabled, Discussions disabled, no MIT license detected, and no repository ruleset. Treat fresh execution output as authoritative.
 
+- [ ] **Step 6: Create or confirm the approved Phase 5B issue structure before implementation**
+
+Use GitHub Issues to maintain exactly one Phase 5B epic and two implementation issues:
+
+```text
+Phase 5B: Recruiter-first governance and evidence hardening
+├─ Phase 5B.1: Repository governance and supply-chain hardening
+└─ Phase 5B.2: Recruiter evidence presentation
+```
+
+If equivalent open issues already exist, reuse them rather than duplicating. Cross-link both implementation issues from the epic and link the epic back from each implementation issue. Do not create issue-per-file tasks. Keep the 5B.1 issue open through post-merge repository-state acceptance; keep the epic open through `v0.1.0`/final Phase 5B acceptance.
+
+Record the three issue numbers/URLs for PR references and the final verification artifact.
+
 **Commit:** none.
 
 ---
@@ -393,11 +407,7 @@ Repeat for the actual versions present in all three workflows (`checkout`, `setu
 
 - [ ] **Step 3: Pin every external action to a full 40-character SHA**
 
-Use readable comments such as:
-
-```yaml
-uses: actions/checkout@<40-char-sha> # v4
-```
+Retain a readable version comment beside each resolved immutable ref (for example, keep `# v4` beside the full SHA used for `actions/checkout`). Do not leave a moving tag in the executable `uses:` value.
 
 Keep official/reputable actions only.
 
@@ -758,8 +768,9 @@ Do not add a routine bypass actor. Preserve the minimum owner/admin recovery rou
 
 ```bash
 gh repo view Praciller/evalops-lab --json hasIssuesEnabled,hasProjectsEnabled,hasWikiEnabled,deleteBranchOnMerge,mergeCommitAllowed,rebaseMergeAllowed,squashMergeAllowed
-gh api repos/Praciller/evalops-lab/rulesets
-gh api repos/Praciller/evalops-lab/rulesets/<RULESET_ID>
+RULESET_ID=$(gh api repos/Praciller/evalops-lab/rulesets --jq '.[] | select(.name == "main-governance") | .id')
+test -n "$RULESET_ID"
+gh api "repos/Praciller/evalops-lab/rulesets/$RULESET_ID"
 ```
 
 Expected: settings/rules reflect the approved model. Do not claim protection from the request payload alone.
@@ -824,6 +835,10 @@ PRIVATE_VULNERABILITY_REPORTING=<ON|UNVERIFIED|UNSUPPORTED>
 - [ ] **Step 4: Stop before Phase 5B.2 if governance is materially incomplete**
 
 Phase 5B.2 may proceed only when 5B.1 is accepted or the owner explicitly accepts a non-material platform limitation. README must not claim controls that are not active.
+
+- [ ] **Step 5: Close the Phase 5B.1 implementation issue only after acceptance**
+
+Post the verified 5B.1 merge SHA, successful security/CI evidence, exact required check contexts, ruleset/settings state, and limitations to the 5B.1 issue. Close it as completed only when the acceptance classification is PASS or an owner-accepted non-material limitation is explicitly recorded. Leave the Phase 5B epic and 5B.2 issue open.
 
 ---
 
