@@ -49,6 +49,7 @@ test("overview remains usable on mobile and keyboard focus is visible", async ({
   await expect(page).toHaveScreenshot("overview-mobile.png", {
     clip: mobileClip,
     // Stable Linux CI capture measured 10,207 differing pixels on this fixed 390x844 clip.
+    maxDiffPixelRatio: 0.035,
     maxDiffPixels: 10_500,
   });
   await page.getByRole("button", { name: "Dark theme" }).click();
@@ -106,6 +107,7 @@ test("comparison detail remains usable on mobile without root overflow", async (
   await expect(page).toHaveScreenshot("comparison-mobile.png", {
     clip: mobileClip,
     // Stable Linux CI capture measured 10,832 differing pixels on this fixed 390x844 clip.
+    maxDiffPixelRatio: 0.035,
     maxDiffPixels: 11_000,
   });
 });
