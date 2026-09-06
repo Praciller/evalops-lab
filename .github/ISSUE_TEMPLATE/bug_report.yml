@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible defect in evaluation, evidence, tooling, or the Evidence Console.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Security warning
+
+        Do not disclose undisclosed vulnerabilities, credentials, private evidence, raw prompts/responses, or other sensitive material in this public issue. Follow [SECURITY.md](../../SECURITY.md) instead.
+  - type: dropdown
+    id: affected_surface
+    attributes:
+      label: Affected surface
+      description: Which public repository surface is affected?
+      options:
+        - Python evaluation core
+        - Dataset or fixture validation
+        - CLI
+        - Public evidence export
+        - Evidence Console or Storybook
+        - CI/workflow
+        - Documentation or governance
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: observed_behavior
+    attributes:
+      label: Observed behavior
+      description: What happened? Include the exact public output when safe.
+      placeholder: Describe the observed behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What should have happened according to the public contract?
+      placeholder: Describe the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give the smallest safe command, route, fixture, or sequence that reproduces the issue.
+      placeholder: |
+        1. Run ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment and version
+      description: Include OS, Python/Node versions, commit or release, and browser version when relevant.
+      placeholder: Windows 11, Python 3.12, Node 22, commit ...
+    validations:
+      required: true
+  - type: input
+    id: artifact_run_id
+    attributes:
+      label: Evidence artifact or run ID
+      description: Provide a public artifact or run identifier when the issue concerns evaluation evidence. Do not attach private artifacts.
+      placeholder: Optional public run_id or artifact_id
+    validations:
+      required: false
+  - type: checkboxes
+    id: security_acknowledgement
+    attributes:
+      label: Security disclosure acknowledgement
+      options:
+        - label: I confirm this issue does not disclose an undisclosed vulnerability, secret, credential, private evidence, raw prompt/response, or other sensitive material.
+          required: true
