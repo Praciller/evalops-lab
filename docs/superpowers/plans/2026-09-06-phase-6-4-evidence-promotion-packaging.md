@@ -168,6 +168,7 @@ class ConfirmExportRequest(BaseModel):
     preview_id: str
     destination_directory: str
 
+
 class ExportManifest(BaseModel):
     schema_version: Literal["workspace-export-manifest-v1"]
     export_id: str
@@ -177,6 +178,7 @@ class ExportManifest(BaseModel):
     files: list[ExportedFile]
     classification: ExportClassification
     created_at: datetime
+
 
 class ExportService:
     def confirm(self, request: ConfirmExportRequest) -> ExportManifest: ...

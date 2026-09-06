@@ -101,9 +101,11 @@ class InputKind(StrEnum):
     RETRIEVAL_GROUND_TRUTH = "retrieval_ground_truth"
     RETRIEVAL_PREDICTIONS = "retrieval_predictions"
 
+
 class InputSourceMode(StrEnum):
     IMPORTED = "imported"
     REFERENCED = "referenced"
+
 
 class InputManifest(BaseModel):
     schema_version: Literal["workspace-input-v1"]
@@ -111,14 +113,15 @@ class InputManifest(BaseModel):
     kind: InputKind
     source_mode: InputSourceMode
     canonical_format: Literal["retrieval-jsonl-v1"]
-    content_sha256: str              # canonical bytes consumed by the runner
-    source_sha256: str               # original source bytes; same as content for canonical JSONL
+    content_sha256: str  # canonical bytes consumed by the runner
+    source_sha256: str  # original source bytes; same as content for canonical JSONL
     record_count: int
     validation_status: Literal["VALID"]
-    source_path: str | None           # referenced input only; private metadata
+    source_path: str | None  # referenced input only; private metadata
     stored_relative_path: str | None  # imported canonical file only
     source_filename: str | None
     created_at: datetime
+
 
 class InputRegistrationResult(BaseModel):
     manifest: InputManifest
@@ -195,6 +198,7 @@ class RetrievalPairValidation(BaseModel):
     blocking_issues: list[ValidationIssue]
     warnings: list[ValidationIssue]
 
+
 class CreateRetrievalRun(BaseModel):
     run_name: str
     ground_truth_input_id: str
@@ -203,6 +207,7 @@ class CreateRetrievalRun(BaseModel):
     system_name: str
     dataset_name: str
     dataset_version: str
+
 
 class RunSnapshot(BaseModel):
     schema_version: Literal["workspace-run-v1"]
@@ -250,6 +255,7 @@ class JobState(StrEnum):
     CANCELLED = "CANCELLED"
     INTERRUPTED = "INTERRUPTED"
 
+
 class JobRecord(BaseModel):
     schema_version: Literal["workspace-job-v1"]
     job_id: str
@@ -261,6 +267,7 @@ class JobRecord(BaseModel):
     safe_error: SafeJobError | None
     created_at: datetime
     updated_at: datetime
+
 
 class SingleWorkerQueue:
     def start(self) -> None: ...
@@ -304,6 +311,7 @@ class RunProvenance(BaseModel):
     git_commit: str | None
     completed_at: datetime
     result_sha256: str
+
 
 class RetrievalRunService:
     def create_and_enqueue(self, workspace_id: str, request: CreateRetrievalRun) -> JobRecord: ...

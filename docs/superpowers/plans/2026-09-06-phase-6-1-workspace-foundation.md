@@ -113,6 +113,7 @@ def run_workspace_command(*, root: Path | None, port: int | None, open_browser: 
 WORKSPACE_REGISTRY_SCHEMA_VERSION = "workspace-registry-v1"
 WORKSPACE_SCHEMA_VERSION = "workspace-v1"
 
+
 class WorkspaceRecord(BaseModel):
     schema_version: Literal["workspace-v1"]
     workspace_id: str
@@ -120,9 +121,11 @@ class WorkspaceRecord(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class WorkspaceRegistry(BaseModel):
     schema_version: Literal["workspace-registry-v1"]
     workspace_ids: list[str]
+
 
 class WorkspaceStore:
     def __init__(self, root: Path) -> None: ...
@@ -157,14 +160,17 @@ class WorkspaceStore:
 class WorkspaceOrigin:
     host: str
     port: int
+
     @property
     def http_origin(self) -> str: ...
+
 
 class BootstrapSessionManager:
     def __init__(self, *, bootstrap_nonce: str | None = None) -> None: ...
     def consume_bootstrap_nonce(self, value: str) -> str: ...  # returns session id
     def validate_session(self, session_id: str) -> bool: ...
     def invalidate_all(self) -> None: ...
+
 
 def validate_host_header(host_header: str, expected: WorkspaceOrigin) -> None: ...
 def validate_mutating_origin(origin_header: str | None, expected: WorkspaceOrigin) -> None: ...

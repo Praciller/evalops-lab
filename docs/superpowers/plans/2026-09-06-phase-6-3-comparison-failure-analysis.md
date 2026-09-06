@@ -88,9 +88,11 @@ class BaselinePointer(BaseModel):
     result_sha256: str
     pinned_at: datetime
 
+
 class WorkspaceState(BaseModel):
     schema_version: Literal["workspace-state-v1"]
     baseline: BaselinePointer | None = None
+
 
 class ComparisonService:
     def set_baseline(self, workspace_id: str, run_id: str) -> WorkspaceState: ...
@@ -121,10 +123,12 @@ class ComparisonCompatibilityStatus(StrEnum):
     COMPARABLE = "COMPARABLE"
     NON_COMPARABLE = "NON_COMPARABLE"
 
+
 class CompatibilityReason(BaseModel):
     field: str
     baseline: str
     candidate: str
+
 
 class ComparisonCompatibility(BaseModel):
     status: ComparisonCompatibilityStatus
@@ -197,6 +201,7 @@ class ComparisonMode(StrEnum):
     CANONICAL = "CANONICAL"
     EXPLORATORY_ONLY = "EXPLORATORY_ONLY"
 
+
 class ComparisonRecord(BaseModel):
     schema_version: Literal["workspace-comparison-v1"]
     comparison_id: str
@@ -210,6 +215,7 @@ class ComparisonRecord(BaseModel):
     policy_version: str
     regression_report: RegressionReport
     created_at: datetime
+
 
 class ComparisonService:
     def create_comparison(
@@ -248,6 +254,7 @@ class FailureTransition(StrEnum):
     IMPROVED = "IMPROVED"
     PERSISTENT_FAILURE = "PERSISTENT_FAILURE"
     CHANGED_FAILURE = "CHANGED_FAILURE"
+
 
 class QueryFailureTransition(BaseModel):
     query_id: str
