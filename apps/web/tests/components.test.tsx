@@ -2,7 +2,7 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Overview } from "@/components/overview";
 import { ComparisonDetail } from "@/components/comparison-detail";
@@ -10,16 +10,28 @@ import { FailureExplorer } from "@/components/failure-explorer";
 import { RunDetail } from "@/components/run-detail";
 import { ProductHeader } from "@/components/shell/product-header";
 import { EvidenceLayout } from "@/components/evidence-layout";
+import { RunCatalog } from "@/components/catalog/run-catalog";
 import { ArtifactBadges } from "@/components/status-badges";
 import { getComparisonBundle, getRunArtifact } from "@/lib/evidence/repository";
+import { getRunCatalogItems } from "@/lib/evidence/catalog";
 
-vi.mock("next/navigation", () => ({ usePathname: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  usePathname: vi.fn(),
+  useRouter: vi.fn(),
+  useSearchParams: vi.fn(),
+}));
 
 const mockedUsePathname = vi.mocked(usePathname);
+const mockedUseRouter = vi.mocked(useRouter);
+const mockedUseSearchParams = vi.mocked(useSearchParams);
+const routerPush = vi.fn();
 
 describe("Evidence Console components", () => {
   beforeEach(() => {
     mockedUsePathname.mockReturnValue("/");
+    mockedUseRouter.mockReturnValue({ push: routerPush } as unknown as ReturnType<typeof useRouter>);
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams() as ReturnType<typeof useSearchParams>);
+    routerPush.mockReset();
   });
 
   it.each([
@@ -48,6 +60,45 @@ describe("Evidence Console components", () => {
     expect(screen.getByRole("button", { name: /theme/i })).toBeInTheDocument();
     expect(screen.getByText("Public Evidence Contract V1 · explicit allowlist")).toBeInTheDocument();
     expect(screen.getByText("No runtime API · no inference · no raw corpus")).toBeInTheDocument();
+  });
+
+  it("renders a safe Runs catalog row with claim dimensions and a detail link", () => {
+    render(<RunCatalog runs={getRunCatalogItems()} />);
+
+    expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "demo-retrieval-fixture-v1" })).toBeInTheDocument();
+    expect(screen.getAllByText("retrieval-fixture").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SYNTHETIC_FIXTURE", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("INTEGRATION_ONLY", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Inspect demo-retrieval-fixture-v1/ })).toHaveAttribute(
+      "href",
+      "/runs/demo-retrieval-fixture-v1/",
+    );
+  });
+
+  it("pushes canonical URL filters and supports clearing one or all filters", () => {
+    mockedUsePathname.mockReturnValue("/runs/");
+    mockedUseSearchParams.mockReturnValue(
+      new URLSearchParams("verification=VERIFIED&data=SYNTHETIC_FIXTURE") as ReturnType<typeof useSearchParams>,
+    );
+    render(<RunCatalog runs={getRunCatalogItems()} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Verification" }), { target: { value: "PARTIAL" } });
+    expect(routerPush).toHaveBeenCalledWith("/runs/?data=SYNTHETIC_FIXTURE&verification=PARTIAL", { scroll: false });
+    fireEvent.click(screen.getByRole("button", { name: "Clear Verification filter" }));
+    expect(routerPush).toHaveBeenCalledWith("/runs/?data=SYNTHETIC_FIXTURE", { scroll: false });
+    fireEvent.click(screen.getByRole("button", { name: "Clear all filters" }));
+    expect(routerPush).toHaveBeenCalledWith("/runs/", { scroll: false });
+  });
+
+  it("shows a safe no-result state for valid filters with no matching runs", () => {
+    mockedUseSearchParams.mockReturnValue(
+      new URLSearchParams("data=CURATED_DATASET") as ReturnType<typeof useSearchParams>,
+    );
+    render(<RunCatalog runs={getRunCatalogItems()} />);
+
+    expect(screen.getByText("No evidence matches these filters.")).toBeInTheDocument();
+    expect(screen.queryByText("No public artifacts exist.")).not.toBeInTheDocument();
   });
 
   it("renders overview identity, catalog summary, and safe run links", () => {
