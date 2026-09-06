@@ -17,7 +17,7 @@ const preview: Preview = {
     },
   },
   globalTypes: {
-    theme: {
+    colorScheme: {
       description: "Evidence Console theme",
       defaultValue: "light",
       toolbar: {
@@ -28,9 +28,9 @@ const preview: Preview = {
   },
   decorators: [
     (Story, context) => {
-      const theme = context.globals.theme === "dark" ? "dark" : "light";
+      const colorScheme = context.globals.colorScheme === "dark" ? "dark" : "light";
       return (
-        <main className={`${theme} min-h-screen bg-canvas p-4 text-ink`}>
+        <main className={`${colorScheme} min-h-screen bg-canvas p-4 text-ink`}>
           <Story />
         </main>
       ) as ReactNode;

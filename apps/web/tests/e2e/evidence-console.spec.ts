@@ -46,7 +46,11 @@ test("overview remains usable on mobile and keyboard focus is visible", async ({
   await page.keyboard.press("Tab");
   await expect(page.locator(":focus")).toHaveAttribute("href", `${appBasePath}/`);
   await page.screenshot({ path: path.join(screenshotsDir, "overview-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("overview-mobile.png", { clip: mobileClip, maxDiffPixelRatio: 0.05 });
+  await expect(page).toHaveScreenshot("overview-mobile.png", {
+    clip: mobileClip,
+    // Stable Linux CI capture measured 10,207 differing pixels on this fixed 390x844 clip.
+    maxDiffPixels: 10_500,
+  });
   await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByRole("button", { name: "Light theme" })).toBeVisible();
@@ -99,7 +103,11 @@ test("comparison detail remains usable on mobile without root overflow", async (
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
   await page.screenshot({ path: path.join(screenshotsDir, "comparison-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("comparison-mobile.png", { clip: mobileClip, maxDiffPixelRatio: 0.05 });
+  await expect(page).toHaveScreenshot("comparison-mobile.png", {
+    clip: mobileClip,
+    // Stable Linux CI capture measured 10,832 differing pixels on this fixed 390x844 clip.
+    maxDiffPixels: 11_000,
+  });
 });
 
 test("failure explorer is accessible, local-only, and has a stable desktop visual", async ({ page }) => {
@@ -171,7 +179,7 @@ test("Pages output exposes only the curated public Storybook", async ({ page }) 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto(`${appBasePath}/storybook/iframe.html?id=foundations-canvas--light&viewMode=story&globals=theme:light`);
+      await page.goto(`${appBasePath}/storybook/iframe.html?id=foundations-canvas--light&viewMode=story&globals=colorScheme:light`);
   await expect(page.locator("#storybook-root")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Evidence Console" })).toBeVisible();
 
@@ -182,9 +190,9 @@ test("Pages output exposes only the curated public Storybook", async ({ page }) 
   expect(rootWidth.scrollWidth).toBeLessThanOrEqual(rootWidth.clientWidth);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
-  await page.goto(`${appBasePath}/storybook/iframe.html?id=foundations-canvas--light&viewMode=story&globals=theme:dark`);
+      await page.goto(`${appBasePath}/storybook/iframe.html?id=foundations-canvas--light&viewMode=story&globals=colorScheme:dark`);
   await expect(page.locator(".dark").first()).toBeVisible();
-  await page.goto(`${appBasePath}/storybook/iframe.html?id=foundations-canvas--light&viewMode=story&globals=theme:light`);
+      await page.goto(`${appBasePath}/storybook/iframe.html?id=foundations-canvas--light&viewMode=story&globals=colorScheme:light`);
   await expect(page.locator(".dark")).toHaveCount(0);
 
   expect(requests.every((url) => url.startsWith(`http://127.0.0.1:${localPort}${appBasePath}/`) || url.startsWith("data:"))).toBe(true);

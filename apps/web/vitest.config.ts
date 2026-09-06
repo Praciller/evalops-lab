@@ -25,7 +25,7 @@ export default defineConfig({
         plugins: [
           storybookTest({
             configDir: path.resolve(__dirname, ".storybook"),
-            initialGlobals: { theme: "light" },
+            initialGlobals: { colorScheme: "light" },
           }),
         ],
         test: {
@@ -44,7 +44,7 @@ export default defineConfig({
         plugins: [
           storybookTest({
             configDir: path.resolve(__dirname, ".storybook"),
-            initialGlobals: { theme: "dark" },
+            initialGlobals: { colorScheme: "dark" },
           }),
         ],
         test: {
