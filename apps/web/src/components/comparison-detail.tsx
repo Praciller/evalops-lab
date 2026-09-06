@@ -1,26 +1,18 @@
 import Link from "next/link";
 
-import { ArtifactBadges } from "@/components/status-badges";
+import { ArtifactBadges } from "@/components/evidence/evidence-badges";
+import { MetricDelta } from "@/components/evidence/metric-delta";
+import { PopulationCompatibilityBadge } from "@/components/evidence/population-compatibility-badge";
 import { EvidenceLayout } from "@/components/evidence-layout";
 import { LimitationsPanel } from "@/components/provenance-panel";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evidence/format";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { buildFailureTransitions, hasRecordChange } from "@/lib/evidence/transitions";
 import type { ComparisonBundle } from "@/lib/evidence/repository";
 
 function formatNullable(value: number | null): string {
   return value === null ? "Not available" : formatMetricValue(value);
-}
-
-function formatDelta(value: number | null): string {
-  if (value === null) return "Not available";
-  return `${value > 0 ? "+" : ""}${formatMetricValue(value)}`;
-}
-
-function resultLabel(status: "PASS" | "REGRESSION" | "MISSING"): string {
-  if (status === "REGRESSION") return "Regression";
-  if (status === "PASS") return "Within allowance";
-  return "Missing";
 }
 
 export function ComparisonDetail({ bundle }: { bundle: ComparisonBundle }) {
@@ -68,7 +60,8 @@ export function ComparisonDetail({ bundle }: { bundle: ComparisonBundle }) {
 
         <section className="surface p-5" aria-labelledby="population-title">
           <CardHeader><CardTitle id="population-title">Population compatibility</CardTitle></CardHeader>
-          <p className="text-sm leading-6 text-muted">Population compatibility: {comparison.population_compatibility}</p>
+          <PopulationCompatibilityBadge status={comparison.population_compatibility} />
+          <p className="mt-3 text-sm leading-6 text-muted">Population compatibility: {comparison.population_compatibility}</p>
           <p className="mt-2 text-xs leading-5 text-muted">Dataset, protocol, top-k, and evaluator-version metadata are matched before record transitions are derived.</p>
         </section>
 
@@ -77,27 +70,25 @@ export function ComparisonDetail({ bundle }: { bundle: ComparisonBundle }) {
             <div><p className="eyebrow">Aggregate policy result</p><CardTitle id="metric-comparison-title">Metric comparison</CardTitle></div>
             <span className="text-xs text-muted">{regressionCount} regression · {passCount} pass</span>
           </CardHeader>
-          <div className="table-scroll" tabIndex={0} role="region" aria-label="Metric comparison table">
-            <table className="data-table min-w-[760px]">
+          <Table className="min-w-[760px]" containerProps={{ tabIndex: 0, role: "region", "aria-label": "Metric comparison table" }}>
               <caption className="sr-only">Reference and candidate metric comparison</caption>
-              <thead><tr><th scope="col">Metric</th><th scope="col">Reference</th><th scope="col">Candidate</th><th scope="col">Delta</th><th scope="col">Direction</th><th scope="col">Result</th></tr></thead>
-              <tbody>
+              <TableHeader><TableRow><TableHead>Metric</TableHead><TableHead>Reference</TableHead><TableHead>Candidate</TableHead><TableHead>Delta</TableHead><TableHead>Direction</TableHead><TableHead>Result</TableHead></TableRow></TableHeader>
+              <TableBody>
                 {comparison.comparisons.map((row) => (
-                  <tr key={row.metric_name}>
+                  <TableRow key={row.metric_name}>
                     <th scope="row">{humanizeMetricName(row.metric_name)}</th>
-                    <td className="font-mono">{formatNullable(row.baseline_value)}</td>
-                    <td className="font-mono">{formatNullable(row.candidate_value)}</td>
-                    <td className="font-mono">{formatDelta(row.delta)}</td>
-                    <td>{row.direction === "higher_is_better" ? "Higher is better" : "Lower is better"}</td>
-                    <td>
-                      <span className={row.status === "REGRESSION" ? "font-semibold text-danger" : row.status === "PASS" ? "font-semibold text-success" : "font-semibold text-caution"}>{resultLabel(row.status)} ({row.status})</span>
+                    <TableCell className="font-mono">{formatNullable(row.baseline_value)}</TableCell>
+                    <TableCell className="font-mono">{formatNullable(row.candidate_value)}</TableCell>
+                    <TableCell><MetricDelta delta={row.delta} direction={row.direction} status={row.status} /></TableCell>
+                    <TableCell>{row.direction === "higher_is_better" ? "Higher is better" : "Lower is better"}</TableCell>
+                    <TableCell>
+                      <span className="font-semibold">{row.status === "REGRESSION" ? "Regression" : row.status === "PASS" ? "Within allowance" : "Missing"}</span>
                       <span className="mt-1 block text-xs leading-5 text-muted">{row.reason}</span>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+          </Table>
         </section>
 
         <section className="surface p-5" aria-labelledby="record-change-title">

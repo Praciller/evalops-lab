@@ -1,9 +1,10 @@
 import Link from "next/link";
 
-import { ArtifactBadges } from "@/components/status-badges";
+import { ArtifactBadges } from "@/components/evidence/evidence-badges";
 import { EvidenceLayout } from "@/components/evidence-layout";
-import { MetricCard } from "@/components/metric-card";
+import { MetricStat } from "@/components/evidence/metric-stat";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evidence/format";
 import { getApprovedComparisonBundles, getApprovedRunArtifacts, getEvidenceIndex } from "@/lib/evidence/repository";
 
@@ -13,7 +14,7 @@ export function Overview() {
   const comparisons = getApprovedComparisonBundles(index);
   const headlineMetrics = runs.flatMap((run) =>
     Object.entries(run.metrics).slice(0, 3).map(([name, value]) => ({
-      name,
+      label: name,
       value,
       context: `${run.run.dataset_name} · ${run.run.run_id}`,
     })),
@@ -38,21 +39,36 @@ export function Overview() {
         </section>
 
         <section aria-labelledby="headline-metrics-title">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow">No universal score</p><h2 id="headline-metrics-title" className="section-title">Headline metrics</h2></div><p className="text-xs text-muted">Each value stays attached to its named run.</p></div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{headlineMetrics.map((metric) => <MetricCard key={`${metric.context}-${metric.name}`} {...metric} />)}</div>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div><p className="eyebrow">No universal score</p><h2 id="headline-metrics-title" className="section-title">Headline metrics</h2></div>
+            <p className="text-xs text-muted">Each value stays attached to its named run.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{headlineMetrics.map((metric) => <MetricStat key={`${metric.context}-${metric.label}`} {...metric} />)}</div>
         </section>
 
         <section aria-labelledby="runs-title">
-          <div className="mb-4"><p className="eyebrow">Approved evidence</p><h2 id="runs-title" className="section-title">Run artifacts</h2></div>
+          <CatalogSectionHeader eyebrow="Approved evidence" title="Run artifacts" href="/runs/" linkLabel="Browse all runs" id="runs-title" />
           <Card className="overflow-hidden">
-            <div className="table-scroll"><table className="data-table"><caption className="sr-only">Approved EvalOps run artifacts</caption><thead><tr><th scope="col">Artifact</th><th scope="col">Dataset</th><th scope="col">Claim dimensions</th><th scope="col">Metrics</th><th scope="col"><span className="sr-only">Inspect</span></th></tr></thead><tbody>
-              {runs.map((run) => <tr key={run.artifact_id}><th scope="row"><Link className="focus-ring rounded font-mono text-xs font-semibold text-accent underline-offset-4 hover:underline" href={`/runs/${run.artifact_id}`}>{run.artifact_id}</Link><span className="mt-1 block text-xs font-normal text-muted">{humanizeLabel(run.run.evaluation_type)}</span></th><td><span className="font-medium">{run.run.dataset_name}</span><span className="mt-1 block text-xs text-muted">{run.run.dataset_version}</span></td><td><ArtifactBadges artifact={run} /></td><td><div className="space-y-1 text-xs">{Object.entries(run.metrics).slice(0, 3).map(([key, value]) => <div key={key}><span className="text-muted">{humanizeMetricName(key)}</span> <span className="font-mono font-semibold">{formatMetricValue(value)}</span></div>)}</div></td><td><Link className="focus-ring inline-flex rounded-md text-sm font-semibold text-accent underline-offset-4 hover:underline" href={`/runs/${run.artifact_id}`}>Inspect <span aria-hidden="true">→</span></Link></td></tr>)}
-            </tbody></table></div>
+            <Table>
+              <caption className="sr-only">Approved EvalOps run artifacts</caption>
+              <TableHeader><TableRow><TableHead>Artifact</TableHead><TableHead>Dataset</TableHead><TableHead>Claim dimensions</TableHead><TableHead>Metrics</TableHead><TableHead><span className="sr-only">Inspect</span></TableHead></TableRow></TableHeader>
+              <TableBody>
+                {runs.map((run) => (
+                  <TableRow key={run.artifact_id}>
+                    <th scope="row"><Link className="focus-ring rounded font-mono text-xs font-semibold text-accent underline-offset-4 hover:underline" href={`/runs/${run.artifact_id}`}>{run.artifact_id}</Link><span className="mt-1 block text-xs font-normal text-muted">{humanizeLabel(run.run.evaluation_type)}</span></th>
+                    <TableCell><span className="font-medium">{run.run.dataset_name}</span><span className="mt-1 block text-xs text-muted">{run.run.dataset_version}</span></TableCell>
+                    <TableCell><ArtifactBadges artifact={run} /></TableCell>
+                    <TableCell><div className="space-y-1 text-xs">{Object.entries(run.metrics).slice(0, 3).map(([key, value]) => <div key={key}><span className="text-muted">{humanizeMetricName(key)}</span> <span className="font-mono font-semibold">{formatMetricValue(value)}</span></div>)}</div></TableCell>
+                    <TableCell><Link className="focus-ring inline-flex rounded-md text-sm font-semibold text-accent underline-offset-4 hover:underline" href={`/runs/${run.artifact_id}`}>Inspect <span aria-hidden="true">→</span></Link></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </Card>
         </section>
 
         <section aria-labelledby="comparisons-title">
-          <div className="mb-4"><p className="eyebrow">Regression evidence</p><h2 id="comparisons-title" className="section-title">Regression evidence</h2></div>
+          <CatalogSectionHeader eyebrow="Regression evidence" title="Regression evidence" href="/comparisons/" linkLabel="Browse all comparisons" id="comparisons-title" />
           <div className="grid gap-4">
             {comparisons.map(({ comparison, baseline, candidate }) => {
               const regressionCount = comparison.comparisons.filter((row) => row.status === "REGRESSION").length;
@@ -78,6 +94,10 @@ export function Overview() {
       </div>
     </EvidenceLayout>
   );
+}
+
+function CatalogSectionHeader({ eyebrow, title, href, linkLabel, id }: { eyebrow: string; title: string; href: string; linkLabel: string; id: string }) {
+  return <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="eyebrow">{eyebrow}</p><h2 id={id} className="section-title">{title}</h2></div><Link className="focus-ring rounded text-sm font-semibold text-accent underline-offset-4 hover:underline" href={href}>{linkLabel} <span aria-hidden="true">→</span></Link></div>;
 }
 
 function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {

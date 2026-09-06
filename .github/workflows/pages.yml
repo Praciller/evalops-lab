@@ -60,9 +60,11 @@ jobs:
       - name: Verify static output
         run: |
           test -f out/index.html
+          test -f out/runs/index.html
           test -f out/runs/demo-retrieval-fixture-v1/index.html
           test -f out/runs/demo-retrieval-reference-v1/index.html
           test -f out/runs/demo-miracl-th-mini-v1/index.html
+          test -f out/comparisons/index.html
           test -f out/comparisons/demo-retrieval-regression-v1/index.html
           test -f out/comparisons/demo-retrieval-regression-v1/failures/index.html
           test -f out/storybook/index.html

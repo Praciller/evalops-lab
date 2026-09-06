@@ -1,6 +1,7 @@
 import type { PublicRunArtifact } from "@/lib/evidence/schemas";
 import { formatMetricValue, humanizeMetricName } from "@/lib/evidence/format";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 function ids(values: string[]) {
   return values.length ? values.join(", ") : "Not included";
@@ -20,23 +21,21 @@ export function EvidenceTable({ evidence }: { evidence: PublicRunArtifact["evide
         <span className="text-xs text-muted">{evidence.length} approved records</span>
       </CardHeader>
       {evidence.length ? (
-        <div className="overflow-x-auto">
-          <table className="data-table">
+        <Table>
             <caption className="sr-only">Approved record-level retrieval evidence</caption>
-            <thead><tr><th scope="col">Record</th><th scope="col">Status</th><th scope="col">Metrics</th><th scope="col">Retrieved IDs</th><th scope="col">Relevant IDs</th></tr></thead>
-            <tbody>
+            <TableHeader><TableRow><TableHead>Record</TableHead><TableHead>Status</TableHead><TableHead>Metrics</TableHead><TableHead>Retrieved IDs</TableHead><TableHead>Relevant IDs</TableHead></TableRow></TableHeader>
+            <TableBody>
               {evidence.map((record) => (
-                <tr key={record.record_ref}>
+                <TableRow key={record.record_ref}>
                   <th className="font-mono text-xs" scope="row">{record.record_ref}</th>
-                  <td><span className={record.failure_category === "PASS" ? "text-success" : "text-danger"}>{record.failure_category === "PASS" ? "Pass" : record.failure_category}</span></td>
-                  <td className="min-w-48 text-xs">{recordMetrics(record)}</td>
-                  <td className="min-w-48 font-mono text-xs text-muted">{ids(record.retrieved_document_ids)}</td>
-                  <td className="min-w-48 font-mono text-xs text-muted">{ids(record.relevant_document_ids)}</td>
-                </tr>
+                  <TableCell><span className={record.failure_category === "PASS" ? "text-success" : "text-danger"}>{record.failure_category === "PASS" ? "Pass" : record.failure_category}</span></TableCell>
+                  <TableCell className="min-w-48 text-xs">{recordMetrics(record)}</TableCell>
+                  <TableCell className="min-w-48 font-mono text-xs text-muted">{ids(record.retrieved_document_ids)}</TableCell>
+                  <TableCell className="min-w-48 font-mono text-xs text-muted">{ids(record.relevant_document_ids)}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+        </Table>
       ) : (
         <p className="empty-state">This artifact publishes aggregate metrics only; no per-record evidence is included.</p>
       )}

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EvidenceLayout } from "@/components/evidence-layout";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMetricValue, humanizeLabel, humanizeMetricName } from "@/lib/evidence/format";
 import type { ComparisonBundle } from "@/lib/evidence/repository";
 import {
@@ -84,15 +85,13 @@ function AvailableExplorer({ bundle, rows }: { bundle: ComparisonBundle; rows: F
         </Card>
 
         <Card className="p-5">
-          <div className="table-scroll" tabIndex={0} role="region" aria-label="Record change table">
-            <table className="data-table min-w-[960px]">
+          <Table className="min-w-[960px]" containerProps={{ tabIndex: 0, role: "region", "aria-label": "Record change table" }}>
               <caption className="sr-only">Record-level reference and candidate changes</caption>
-              <thead><tr><th scope="col">Record ID</th><th scope="col">Transition</th><th scope="col">Reference category</th><th scope="col">Candidate category</th><th scope="col">Changed metrics</th><th scope="col">Evidence</th></tr></thead>
-              <tbody>
+              <TableHeader><TableRow><TableHead>Record ID</TableHead><TableHead>Transition</TableHead><TableHead>Reference category</TableHead><TableHead>Candidate category</TableHead><TableHead>Changed metrics</TableHead><TableHead>Evidence</TableHead></TableRow></TableHeader>
+              <TableBody>
                 {filteredRows.map((row) => <TransitionRow key={row.recordRef} row={row} />)}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+          </Table>
           {!filteredRows.length ? <p className="empty-state mt-4">No record changes match the selected filters.</p> : null}
         </Card>
       </div>
@@ -102,13 +101,13 @@ function AvailableExplorer({ bundle, rows }: { bundle: ComparisonBundle; rows: F
 
 function TransitionRow({ row }: { row: FailureTransitionRow }) {
   return (
-    <tr>
+    <TableRow>
       <th scope="row" className="font-mono text-xs">{row.recordRef}</th>
-      <td><span className={row.kind === "STABLE_PASS" ? "font-semibold text-success" : "font-semibold text-danger"}>{transitionLabels[row.kind]}</span></td>
-      <td>{row.baselineCategory}</td>
-      <td>{row.candidateCategory}</td>
-      <td className="text-xs">{row.metricDeltas.length ? row.metricDeltas.map((delta) => <div key={delta.metricName}>{humanizeMetricName(delta.metricName)} {delta.delta === null ? "changed" : `${delta.delta > 0 ? "+" : ""}${formatMetricValue(delta.delta)}`}</div>) : "No metric delta"}</td>
-      <td>
+      <TableCell><span className={row.kind === "STABLE_PASS" ? "font-semibold text-success" : "font-semibold text-danger"}>{transitionLabels[row.kind]}</span></TableCell>
+      <TableCell>{row.baselineCategory}</TableCell>
+      <TableCell>{row.candidateCategory}</TableCell>
+      <TableCell className="text-xs">{row.metricDeltas.length ? row.metricDeltas.map((delta) => <div key={delta.metricName}>{humanizeMetricName(delta.metricName)} {delta.delta === null ? "changed" : `${delta.delta > 0 ? "+" : ""}${formatMetricValue(delta.delta)}`}</div>) : "No metric delta"}</TableCell>
+      <TableCell>
         <details>
           <summary className="focus-ring cursor-pointer rounded text-sm font-semibold text-accent">Inspect evidence</summary>
           <div className="mt-3 space-y-2 text-xs leading-5 text-muted">
@@ -119,7 +118,7 @@ function TransitionRow({ row }: { row: FailureTransitionRow }) {
             <p>Candidate metrics: <span className="font-mono">{JSON.stringify(row.candidateRecord.metrics)}</span></p>
           </div>
         </details>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
