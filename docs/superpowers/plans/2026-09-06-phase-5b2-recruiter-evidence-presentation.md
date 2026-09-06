@@ -599,9 +599,21 @@ Squash merge through the normal enforced PR path. Record PR number, final head S
 
 **Interfaces:** live GitHub Pages production, Playwright/axe/network observation.
 
-- [ ] **Step 1: Wait for the post-merge Pages deployment that corresponds to accepted `main`**
+- [ ] **Step 1: Trigger and wait for a Pages deployment from the accepted final 5B.2-A `main` SHA**
 
-Record canonical main SHA and Pages workflow run/deployment URL. Do not capture localhost screenshots as final production proof.
+`README.md` is not currently included in the Pages workflow's automatic `push.paths`, so a README-only merge must not wait for a deployment that will never start. After the 5B.2-A merge, refresh `origin/main`, record its SHA, then dispatch the existing Pages workflow explicitly:
+
+```bash
+git fetch origin --prune
+FINAL_5B2A_SHA=$(git rev-parse origin/main)
+gh workflow run pages.yml --repo Praciller/evalops-lab --ref main
+sleep 5
+PAGES_RUN=$(gh run list --repo Praciller/evalops-lab --workflow pages.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$PAGES_RUN" --repo Praciller/evalops-lab --exit-status
+gh run view "$PAGES_RUN" --repo Praciller/evalops-lab --json headSha,conclusion,url
+```
+
+Expected: the dispatched run concludes `success` and its `headSha` equals `FINAL_5B2A_SHA`. Record the run/deployment URL. Do not capture localhost screenshots as final production proof.
 
 - [ ] **Step 2: Verify all public recruiter/evidence routes against production**
 
