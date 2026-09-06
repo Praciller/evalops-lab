@@ -4,6 +4,7 @@
 
 - **Hosting:** GitHub Pages
 - **Canonical URL:** https://praciller.github.io/evalops-lab/
+- **Public Storybook:** https://praciller.github.io/evalops-lab/storybook/
 - **Source branch:** `main`
 - **Frontend:** `apps/web`
 - **Production base path:** `/evalops-lab`
@@ -15,7 +16,7 @@ The Evidence Console is a static, read-only presentation of the checked-in Publi
 
 ## Build and verification
 
-The Pages workflow runs the frontend quality gates, builds the Pages-mode static export, verifies the `/evalops-lab` browser path, checks the expected generated routes, and uploads only `apps/web/out` with the official GitHub Pages artifact action.
+The Pages workflow runs the frontend quality gates, builds and verifies the curated public Storybook, assembles the Pages-mode static export, verifies the `/evalops-lab` browser path, checks the expected generated routes, and uploads only `apps/web/out` with the official GitHub Pages artifact action.
 
 Local Pages-mode verification:
 
@@ -25,6 +26,9 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
+npm run storybook:build:public
+node scripts/verify-public-storybook.mjs
+npm run storybook:test
 npm run build:pages
 npm run test:e2e:pages
 ```
@@ -51,6 +55,18 @@ The deployment job reported success and GitHub returned the canonical environmen
 Production browser verification covered the Overview, comparison, Failure Explorer, reference run, and candidate run. All five routes returned HTTP 200. The comparison rendered `MATCHED`, four aggregate `REGRESSION` rows and one `PASS`, and the evidence-correct two-record change summary. The Failure Explorer kept `THQA-002` as `Persistent category` but excluded it from changed-only results; `THQA-004` remained an introduced failure and `THQA-005` a stable pass with metric deltas. Checked comparison/explorer routes had zero axe violations, dark theme worked, 390 px pages had no root horizontal overflow while wide tables scrolled internally, and no unexpected external requests or HTTP >=400 responses were observed.
 
 This remains `SYNTHETIC_FIXTURE` + `INTEGRATION_ONLY` evidence. It is not an official benchmark result or model-superiority claim.
+
+## Evidence Console Phase 5A.1 verified deployment
+
+- **Deployed commit:** `f2c2bc2973206a58f1895b832589d082ffb84ec7`
+- **EvalOps CI:** `34012232212` — success
+- **Web Evidence Console CI:** `34012232221` — success
+- **GitHub Pages:** `34012232095` — success
+- **Public Storybook:** https://praciller.github.io/evalops-lab/storybook/
+
+Fresh production browser verification confirmed HTTP 200 for the Evidence Console and public Storybook. The Storybook production index contained exactly 12 curated public titles with no internal/debug title leakage. Light and dark `colorScheme` rendering both worked, the checked 390 px story had no root horizontal overflow, and axe reported zero violations on the checked Overview and Storybook story. No unexpected third-party runtime requests or HTTP >=400 responses were observed.
+
+This release adds the Evidence Design System foundation and curated component catalog only. Existing public evidence remains `SYNTHETIC_FIXTURE` + `INTEGRATION_ONLY`; the Storybook does not expand the Public Evidence Contract or support benchmark/model-superiority claims.
 
 ## Redeploy
 

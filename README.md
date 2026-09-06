@@ -8,9 +8,9 @@ EvalOps Lab treats AI evaluation as a software and data quality problem rather t
 
 **Signal:** Reproducible AI evaluation for retrieval, groundedness, failure taxonomy, and regression decisions.
 
-[Repository](https://github.com/Praciller/evalops-lab) · [Live Evidence Console](https://praciller.github.io/evalops-lab/)
+[Repository](https://github.com/Praciller/evalops-lab) · [Live Evidence Console](https://praciller.github.io/evalops-lab/) · [Public Storybook](https://praciller.github.io/evalops-lab/storybook/)
 
-**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation · same-population regression comparison · record-level change inspection.
+**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation · same-population regression comparison · record-level change inspection · evidence-focused UI design system · curated public Storybook.
 
 [Comparison demo](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/) · [Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/)
 
@@ -58,7 +58,10 @@ Evidence Console at `apps/web`; Phase 4 extends it with an evidence-safe
 comparison view and comparison-scoped Failure Explorer. The console reads only
 the checked-in explicit index at `apps/web/public/evidence/index.json`, which
 currently allowlists three synthetic run artifacts plus one synthetic comparison
-artifact. It has no runtime API, inference, provider credentials, external data
+artifact. Evidence Console Phase 5A.1 also publishes a curated static Storybook at
+[https://praciller.github.io/evalops-lab/storybook/](https://praciller.github.io/evalops-lab/storybook/);
+its public build uses an explicit allowlist and excludes internal/debug stories. It
+has no runtime API, inference, provider credentials, external data
 download, or public write path. Build and test it with:
 
 ```bash
@@ -67,8 +70,14 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
+npm run storybook:build
+npm run storybook:build:public
+node scripts/verify-public-storybook.mjs
+npm run storybook:test
 npm run build
 npm run test:e2e
+npm run build:pages
+npm run test:e2e:pages
 ```
 
 The demo artifacts are regenerated explicitly with
