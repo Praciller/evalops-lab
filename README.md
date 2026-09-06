@@ -1,72 +1,170 @@
 # EvalOps Lab
 
-AI reliability testing and evaluation framework for RAG systems, LLM outputs, and AI-generated code with reproducible benchmarks, failure analysis, and regression testing.
+## A reproducible AI evaluation framework for evidence-backed engineering
 
-EvalOps Lab treats AI evaluation as a software and data quality problem rather than relying on a single model-generated score.
+EvalOps Lab evaluates RAG retrieval and groundedness as a software and data
+quality problem: validate the data, preserve provenance, measure deterministic
+signals, inspect failures, and make regression decisions against an explicit
+policy.
 
-## Recruiter snapshot
+[![EvalOps CI](https://github.com/Praciller/evalops-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/Praciller/evalops-lab/actions/workflows/ci.yml)
+[![Web Evidence Console CI](https://github.com/Praciller/evalops-lab/actions/workflows/web-ci.yml/badge.svg)](https://github.com/Praciller/evalops-lab/actions/workflows/web-ci.yml)
+[![CodeQL](https://github.com/Praciller/evalops-lab/actions/workflows/codeql.yml/badge.svg)](https://github.com/Praciller/evalops-lab/actions/workflows/codeql.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Signal:** Reproducible AI evaluation for retrieval, groundedness, failure taxonomy, and regression decisions.
+**AI Evaluation · RAG Regression · Failure Analysis · Deterministic Evidence · Python / TypeScript · CI/CD**
 
-[Repository](https://github.com/Praciller/evalops-lab) · [Live Evidence Console](https://praciller.github.io/evalops-lab/) · [Public Storybook](https://praciller.github.io/evalops-lab/storybook/)
+## Start with the live evidence
 
-**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation · same-population regression comparison · record-level change inspection · evidence-focused UI design system · URL-driven evidence catalogs · curated public Storybook.
+<a href="https://praciller.github.io/evalops-lab/">Open the Evidence Console →</a>
 
-[Runs catalog](https://praciller.github.io/evalops-lab/runs/) · [Comparisons catalog](https://praciller.github.io/evalops-lab/comparisons/) · [Comparison demo](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/) · [Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/)
+Secondary proof: [Public Storybook](https://praciller.github.io/evalops-lab/storybook/)
+for the curated evidence design system.
 
-**Boundary:** the hosted Evidence Console is static/read-only and currently exposes only synthetic integration evidence; it does not run evaluators or support model-superiority claims.
+The console is a static, read-only presentation of explicitly allowlisted,
+sanitized JSON artifacts. It does not run evaluators, call model providers, or
+make production model-superiority claims.
 
-## Problem
+![Evidence Console overview](docs/screenshots/evidence-console/overview-desktop.png)
 
-An answer can look fluent while being wrong, unsupported by retrieved context, stale, incomplete, or unsafe to change. A score without ground truth, provenance, and failure evidence does not provide a reliable engineering signal.
+*Production Evidence Console view with provenance and scope labels visible. The
+public comparison data is `SYNTHETIC_FIXTURE` / `INTEGRATION_ONLY`.*
 
-## Goals
+## Review EvalOps Lab in 90 seconds
 
-The bootstrap establishes a local, testing-first core for Thai/English RAG evaluation:
+1. **[Overview](https://praciller.github.io/evalops-lab/)** — verify that the
+   public console exposes only the approved evidence bundle and shows its
+   `VERIFIED`, `SYNTHETIC_FIXTURE`, and `INTEGRATION_ONLY` boundaries.
+2. **[Regression Comparison](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/)**
+   — verify that a reference/candidate pair from the same synthetic population
+   is compared under an explicit regression policy.
+3. **[Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/)**
+   — inspect record-level transitions rather than relying on an aggregate score.
+4. **[Architecture](#architecture)** — follow the path from ground truth to
+   sanitized public evidence.
+5. **[Tests & CI](#engineering-quality)** — reproduce the local checks and
+   inspect the Python, Web, CodeQL, dependency, and Pages workflows.
 
-1. validate dataset quality before evaluating a system;
-2. prefer deterministic retrieval metrics;
-3. classify failures instead of hiding them behind averages;
-4. record dataset, evaluator, run, and system provenance;
-5. compare current results with a baseline using explicit thresholds.
+## Why EvalOps Lab
+
+Fluent output and a single aggregate score are not enough to support an
+engineering decision. A useful evaluation needs ground truth, dataset and
+system provenance, visible failure categories, and a policy that says when a
+change is a regression. EvalOps Lab keeps those concerns separate so a reviewer
+can trace a public claim back to a bounded artifact or a tested implementation.
+
+## Evidence Matrix
+
+| Capability | Evidence | Data kind | Claim scope | Verification |
+| --- | --- | --- | --- | --- |
+| Retrieval evaluation | [Runs catalog](https://praciller.github.io/evalops-lab/runs/) and deterministic metric tests | `SYNTHETIC_FIXTURE` for public demo | `INTEGRATION_ONLY` | [retrieval evaluators](src/evalops/evaluators/retrieval/) and [tests](tests/) |
+| Regression decisions | [Comparison detail](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/) | `SYNTHETIC_FIXTURE`, same reference/candidate population | `INTEGRATION_ONLY` | [regression policy](src/evalops/regression/) and public artifact `VERIFIED` status |
+| Failure investigation | [Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/) | `SYNTHETIC_FIXTURE` record transitions | `INTEGRATION_ONLY` | [failure taxonomy](src/evalops/failures/) and route tests |
+| Public evidence isolation | [Public Evidence Contract](docs/specs/public-evidence-contract-v1.md) and checked-in [allowlist](apps/web/public/evidence/index.json) | Sanitized, explicitly indexed artifacts | Static presentation only | strict frontend schema and evidence-generation drift tests |
+| Reproducibility and quality gates | [reviewer quickstart](#reviewer-quickstart), [reproducibility guide](docs/reproducibility.md), CI workflows | Offline fixtures and checked-in source | Local/CI verification, not a universal benchmark claim | Python, Web, Storybook, Playwright, axe, CodeQL, and Dependency Review gates |
+
+## What this demonstrates
+
+- **AI Evaluation Design:** dataset validation, provenance-aware run envelopes,
+  deterministic retrieval metrics, and separated human/system/judge evidence.
+- **RAG Retrieval Metrics & Regression:** Precision@K, Recall@K, Hit Rate@K,
+  MRR, nDCG, baseline comparison, thresholds, and same-population decisions.
+- **Failure Taxonomy and investigation:** record-level classifications and
+  changed-only comparison views make failure transitions inspectable.
+- **Evidence and claim quality:** a strict public contract, explicit artifact
+  allowlist, literal scope labels, and fail-closed frontend validation.
+- **Evaluation engineering:** typed Pydantic models, dependency-light Python,
+  TypeScript/Zod public interfaces, and deterministic generated fixtures.
+- **Delivery discipline:** Python/Web CI, public Storybook checks, browser and
+  accessibility tests, CodeQL, Dependency Review, and static GitHub Pages.
 
 ## Architecture
 
-```text
-Dataset → validation → evaluation runner → metric evaluators
-                                      ↓
-                         failure taxonomy + structured result
-                                      ↓
-                             baseline/regression comparison
+```mermaid
+flowchart TD
+    A[Dataset / Ground Truth] --> B[Evaluation Runner]
+    B --> C[Retrieval / Groundedness Evaluators]
+    C --> D[Deterministic Run Artifacts]
+    D --> E[Comparison + Regression Policy]
+    E --> F[Failure Analysis]
+    F --> G[Sanitized Public Evidence Contract]
+    G --> H[Static Evidence Console]
 ```
 
-The first runnable path is retrieval evaluation. Generation remains a typed
-interface for future adapters. The bounded Phase 5A LLM-as-a-Judge path is
-opt-in and does not replace human ground truth or existing deterministic/HHEM
-results. The owner-authorized Phase 5B-L local full benchmark is recorded as a
-separate protocol-specific baseline; it does not authorize a new Gemini run or
-another model experiment.
+The Python evaluation core is the source of truth. The static frontend reads
+only the explicit `apps/web/public/evidence/index.json` allowlist and the
+artifact files named by that index. It is read-only and fail-closed; it has no
+API route, server action, inference path, provider credential, persistence,
+analytics, or external runtime fetch.
 
-### Public Evidence Dashboard boundary
+### Trust & Limitations
 
-The public Evidence Console at [https://praciller.github.io/evalops-lab/](https://praciller.github.io/evalops-lab/) is a static, read-only presentation of explicitly
-approved, sanitized JSON artifacts. The Python evaluation core remains the
-source of truth; the public path does not run evaluation, call model providers,
-download external data, or expose raw result details. Phase 1 defines the
-versioned Public Evidence Contract and exporters. Phase 2 adds the local static
-Evidence Console at `apps/web`; Phase 4 extends it with an evidence-safe
-comparison view and comparison-scoped Failure Explorer. The console reads only
-the checked-in explicit index at `apps/web/public/evidence/index.json`, which
-currently allowlists three synthetic run artifacts plus one synthetic comparison
-artifact. Evidence Console Phase 5A.2 adds static [Runs](https://praciller.github.io/evalops-lab/runs/)
-and [Comparisons](https://praciller.github.io/evalops-lab/comparisons/) catalogs with
-validated URL-driven presentation filters, browser-history navigation, and a
-shared product shell. Filter state never changes artifact truth and no catalog
-loads raw evidence in the browser. The curated static Storybook remains at
-[https://praciller.github.io/evalops-lab/storybook/](https://praciller.github.io/evalops-lab/storybook/);
-its public build uses an explicit allowlist and excludes internal/debug stories. It
-has no runtime API, inference, provider credentials, external data
-download, or public write path. Build and test it with:
+`SYNTHETIC_FIXTURE` is not an official benchmark. `INTEGRATION_ONLY` is not
+evidence of real-world model superiority. The public reference/candidate pair
+demonstrates the evaluation, regression, and failure-analysis path on a bounded
+fixture; it does not establish production retrieval performance.
+
+The repository also contains protocol-specific benchmark work that is kept
+separate from the public demo. See the [verified benchmark results](docs/benchmark-results.md),
+[MIRACL guide](docs/miracl-benchmark.md), [RAGTruth guide](docs/ragtruth-benchmark.md),
+[HHEM evaluator guide](docs/hhem-evaluator.md), and [LLM judge pilot record](docs/llm-judge-pilot.md).
+Those documents preserve their own dataset, protocol, and execution scope.
+
+## Selected production evidence
+
+The following three views are curated to show the product path without turning
+the README into a screenshot catalog.
+
+### Regression comparison
+
+![Regression comparison](docs/screenshots/evidence-console/comparison-desktop.png)
+
+*The public comparison shows a verified synthetic reference/candidate fixture;
+its regression result is integration evidence, not an official benchmark.*
+
+### Failure Explorer
+
+![Failure Explorer](docs/screenshots/evidence-console/failure-explorer-desktop.png)
+
+*Record-level failure transitions are inspectable within the same
+`SYNTHETIC_FIXTURE` / `INTEGRATION_ONLY` scope.*
+
+## Engineering quality
+
+- [EvalOps CI](.github/workflows/ci.yml) runs Python tests, lint, formatting,
+  and type checks.
+- [Web Evidence Console CI](.github/workflows/web-ci.yml) runs frontend lint,
+  type checks, unit tests, Storybook publication checks, browser tests, and
+  accessibility checks.
+- [Pages deployment](.github/workflows/pages.yml) publishes only the static
+  `apps/web/out` artifact and verifies the `/evalops-lab` path.
+- [CodeQL](.github/workflows/codeql.yml) and [Dependency Review](.github/workflows/dependency-review.yml)
+  are active repository checks.
+- The active `main-governance` ruleset requires pull requests, resolved review
+  threads, squash-only merges, required checks, and blocks deletion and
+  non-fast-forward updates. Repository-wide security state is documented in
+  [SECURITY.md](SECURITY.md).
+
+## Reviewer quickstart
+
+From a clean checkout, the deterministic offline path requires no paid service,
+provider credential, or full external dataset:
+
+```bash
+python -m pip install -e ".[dev]"
+pytest
+ruff check .
+ruff format --check .
+mypy src
+python -m evalops dataset validate datasets/fixtures/thai-rag-sample.jsonl --document-catalog datasets/fixtures/document-catalog.txt
+python -m evalops retrieval evaluate --ground-truth datasets/fixtures/retrieval-ground-truth.jsonl --predictions datasets/fixtures/retrieval-predictions.jsonl --k 5
+python -m evalops benchmark miracl --language th --split dev --retriever bm25 --k 5 --mini
+```
+
+The mini MIRACL command uses the clearly labeled synthetic `miracl-th-mini`
+fixture. Its score is not an official MIRACL result.
+
+For the frontend:
 
 ```bash
 cd apps/web
@@ -74,211 +172,99 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
-npm run storybook:build
-npm run storybook:build:public
-node scripts/verify-public-storybook.mjs
-npm run storybook:test
 npm run build
-npm run test:e2e
-npm run build:pages
-npm run test:e2e:pages
 ```
 
-The demo artifacts are regenerated explicitly with
-`python scripts/generate_public_demo_evidence.py`. The Thai MIRACL-shaped mini
-fixture is synthetic integration evidence, not an official benchmark result.
+The complete Storybook, Pages, browser, evidence-regeneration, external-dataset,
+and opt-in evaluator protocols are documented in [CONTRIBUTING.md](CONTRIBUTING.md),
+[AGENTS.md](AGENTS.md), and [docs/reproducibility.md](docs/reproducibility.md).
 
-## Implemented
-
-- Pydantic schemas for curated RAG cases, retrieval inputs, run metadata, and results.
-- Dataset validation for required fields, duplicate IDs, near-duplicate questions, constrained labels, empty ground truth, and optional document catalogs.
-- Deterministic Precision@K, Recall@K, Hit Rate@K, MRR, and binary-relevance nDCG with unit tests.
-- Explicit RAG failure taxonomy and per-query retrieval classifications.
-- Higher-is-better/lower-is-better baseline comparison with minimum/maximum thresholds and allowable degradation.
-- JSONL loading, traceable result serialization, and a small reusable CLI.
-- Synthetic Thai fixtures, a pinned MIRACL Thai adapter/mini benchmark, checksum-aware non-destructive preparation, and GitHub Actions CI.
-- RAGTruth human-label normalization, strict/factual annotation policies, quality filtering, deterministic heuristic hallucination evaluation, and failure analysis.
-- Optional pinned HHEM-2.1-Open model evaluation with reviewed custom-code hashes, deterministic context construction, threshold leakage protection, and paired McNemar comparison.
-- Phase 5A LLM judge pilot framework with frozen strict-groundedness contracts,
-  provider-independent readiness, preserved Gemini/Groq/OpenRouter/OKMD
-  adapters, deterministic balanced sampling, resumable bounded execution, and
-  aggregate comparison tooling. See
-  [`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md).
-
-## Evaluation layers
+## Evaluation model
 
 EvalOps Lab keeps the evidence chain separate:
 
 1. Dataset manifests and validation establish what data is being evaluated.
-2. Human labels remain distinct from system predictions and model-generated judge outputs.
+2. Human labels remain distinct from system predictions and model-generated
+   judge outputs.
 3. Deterministic metrics and model-backed evaluators produce traceable results.
-4. Failure analysis and regression comparison turn scores into engineering evidence.
+4. Failure analysis and regression comparison turn scores into engineering
+   evidence.
 
-Human labels remain distinct from model-generated judge outputs. Phase 5A is a
-bounded evaluator-validation framework, and the completed Phase 5B-L result
-reports full-population RAGTruth performance only for its frozen local
-protocol.
+The initial runnable path is retrieval evaluation. Generation remains a typed
+interface for future adapters. The bounded Phase 5A LLM-as-a-Judge path is
+opt-in and does not replace human ground truth or existing deterministic/HHEM
+results. The local full-population protocol is documented separately and does
+not authorize a new Gemini run or another model experiment.
 
-## Initial datasets
+## Datasets and benchmark scope
 
-- **MIRACL Thai:** Phase 2 retrieval benchmark integration. The repository contains verified source metadata and a synthetic offline fixture; the full corpus is prepared locally under ignored storage and is not committed.
-- **RAGTruth:** Phase 3 human-annotation comparison for groundedness/hallucination evaluation. The adapter, pinned preparation, deterministic heuristic baseline, response-level metrics, slices, FP/FN evidence, and synthetic offline fixture are implemented. The official snapshot is prepared locally under ignored storage and is not committed.
-- **HHEM-2.1-Open:** Phase 4 optional model-backed evaluator with an exact model/tokenizer revision, reviewed custom-code hashes, deterministic RAGTruth context construction, threshold reporting, and paired comparison utilities. It is opt-in and is not imported by the default offline test path.
-- **thai-rag-eval-200:** manual curation specification with five labeled seed fixtures. The five records validate the schema and pipeline; they are not a 200-case benchmark.
+- **MIRACL Thai:** a pinned adapter and synthetic offline mini fixture; the
+  full external corpus is not committed and the full dev BM25 run is not part
+  of normal validation.
+- **RAGTruth:** an adapter, pinned preparation, deterministic heuristic baseline,
+  optional HHEM evaluator, and protocol-specific local results; external files
+  remain outside Git.
+- **HHEM-2.1-Open:** an opt-in model-backed evaluator with reviewed revision and
+  weight-file safeguards; it is not imported by the default offline path.
+- **thai-rag-eval-200:** five manually curated seed records, not a 200-case
+  benchmark.
 
-Dataset metadata and rules are in [`datasets/README.md`](datasets/README.md) and [`datasets/manifests/`](datasets/manifests/). MIRACL and RAGTruth metadata are pinned to verified upstream revisions recorded in their manifests.
-
-Verified results are consolidated in [`docs/benchmark-results.md`](docs/benchmark-results.md).
-The reproducible command flow is in [`docs/reproducibility.md`](docs/reproducibility.md),
-and HHEM provenance/security details are in [`docs/hhem-evaluator.md`](docs/hhem-evaluator.md).
-The isolated local Ollama/Qwen3 Phase 5A-L and completed Phase 5B-L
-experiments are documented in [`docs/llm-judge-pilot.md`](docs/llm-judge-pilot.md);
-they remain separate from the partial Gemini pilot and do not authorize a new
-Gemini/model experiment.
-
-## RAGTruth hallucination benchmark
-
-The official RAGTruth files are prepared and evaluated explicitly; normal CI
-remains offline. Use the synthetic fixture for tests and the real command only
-after choosing to download the pinned snapshot. See the detailed
-[RAGTruth benchmark guide](docs/ragtruth-benchmark.md) for the annotation
-policies, quality filtering, leakage boundary, and baseline limitations.
-The optional model-backed path is documented in the
-[HHEM evaluator guide](docs/hhem-evaluator.md).
-
-## MIRACL Thai Benchmark
-
-MIRACL Thai provides native-language passage retrieval queries, TREC-style
-qrels, and a large Thai Wikipedia passage corpus. The official sources report
-542,166 Thai passages from 128,179 articles, with 733 dev queries and 7,573
-dev judgments. See the detailed [MIRACL benchmark guide](docs/miracl-benchmark.md)
-and the verified [MIRACL project repository](https://github.com/project-miracl/miracl).
-
-Preparation is explicit and pinned to recorded upstream revisions:
-
-```bash
-evalops dataset prepare miracl --language th --split dev --mini
-evalops dataset prepare miracl --language th --split dev --topics-qrels-only
-```
-
-The first command is offline and uses a **synthetic test fixture, not MIRACL
-benchmark data**. The second prepares real topics/qrels without downloading the
-large corpus. Full preparation and the opt-in BM25 dev run are documented in
-[`docs/miracl-benchmark.md`](docs/miracl-benchmark.md). Normal CI never
-downloads the full dataset.
-
-The baseline is a deterministic local BM25 retriever with Thai character
-bigrams/trigrams plus Latin/number runs. It uses the existing EvalOps metric
-layer and persists per-query rankings, scores, qrels, failure counts, source
-revisions, tokenization strategy, and run metadata. Results are not described
-as official MIRACL leaderboard scores.
-
-The official Thai corpus listing shows two shards totaling about 110 MB
-compressed. Because the transparent BM25 baseline expands the corpus into an
-in-memory index, the full run is intentionally not part of normal validation;
-available memory must be assessed before an owner-run experiment.
+Dataset rules and manifests are in [datasets/README.md](datasets/README.md)
+and [datasets/manifests/](datasets/manifests/). The canonical measured-result
+summary is [docs/benchmark-results.md](docs/benchmark-results.md).
 
 ## Metrics and failure taxonomy
 
-Retrieval metrics are implemented locally so their formulas are visible and independently tested. Sequence callers use binary relevance; MIRACL qrel mappings preserve positive graded labels for nDCG. Duplicate retrieved IDs cannot create extra hits. Precision retains `k` as its denominator when fewer than `k` results are returned. Empty relevance sets score zero and are not silently treated as successful retrieval.
+Retrieval metrics are implemented locally so formulas are visible and tested.
+Sequence callers use binary relevance; MIRACL qrel mappings preserve positive
+graded labels for nDCG. Duplicate retrieved IDs cannot create extra hits.
+Precision retains `k` as its denominator when fewer than `k` results are
+returned. Empty relevance sets score zero and are not silently treated as
+successful retrieval.
 
-Initial constrained failure categories include `PASS`, `RETRIEVAL_MISS`, `WRONG_ANSWER`, `HALLUCINATION`, `UNSUPPORTED_CLAIM`, `WRONG_CITATION`, `INCOMPLETE_ANSWER`, `CONTEXT_CONFLICT`, `SHOULD_ABSTAIN`, `DATASET_AMBIGUOUS`, and `GROUND_TRUTH_ERROR`.
+Initial constrained failure categories include `PASS`, `RETRIEVAL_MISS`,
+`WRONG_ANSWER`, `HALLUCINATION`, `UNSUPPORTED_CLAIM`, `WRONG_CITATION`,
+`INCOMPLETE_ANSWER`, `CONTEXT_CONFLICT`, `SHOULD_ABSTAIN`,
+`DATASET_AMBIGUOUS`, and `GROUND_TRUTH_ERROR`.
 
-## Reproducibility
+## Reproducibility and provenance
 
-Every result envelope records run ID, dataset name/version, system name, top-k, evaluator versions, optional model/provider/prompt/retriever details, random seed, timestamp, and Git commit when available. Local evaluation requires no paid service or API key.
+Every result envelope records run ID, dataset name/version, system name, top-k,
+evaluator versions, optional model/provider/prompt/retriever details, random
+seed, timestamp, and Git commit when available. Local evaluation requires no
+paid service or API key.
+
+External datasets and model weights stay outside Git. HHEM execution is opt-in,
+pinned to one reviewed revision, and guarded by a manifest that checks the
+tokenizer revision, configuration/custom-code hashes, and safe weight-file
+identity before importing remote code. The repository does not redistribute
+external MIRACL/RAGTruth corpora or HHEM weights.
 
 See the [reproducibility guide](docs/reproducibility.md) for installation,
-offline fixtures, opt-in external preparation, HHEM setup, and artifact comparison.
-
-## Security and provenance
-
-External datasets and model weights stay outside Git. HHEM execution is
-opt-in, pinned to one reviewed revision, and guarded by a manifest that checks
-the tokenizer revision, configuration/custom-code hashes, and safe weight-file
-identity before importing remote code. Default CI installs only `.[dev]` and
-does not download datasets or execute HHEM custom code.
-
-The repository includes source, tests, metadata, and small synthetic fixtures;
-it does not redistribute the external MIRACL/RAGTruth corpora or HHEM weights.
-Upstream terms recorded in the manifests must be re-checked before any
-redistribution, and this repository does not assert a project license for
-those upstream assets.
-
-## Local setup
-
-Python 3.11+ is supported; CI runs Python 3.12.
-
-```bash
-python -m venv .venv
-python -m pip install -e ".[dev]"
-```
-
-## Fast reviewer path
-
-From the repository root, run the deterministic offline path:
-
-```bash
-python -m pip install -e ".[dev]"
-python -m pytest -q
-python -m evalops dataset validate datasets/fixtures/thai-rag-sample.jsonl --document-catalog datasets/fixtures/document-catalog.txt
-python -m evalops retrieval evaluate --ground-truth datasets/fixtures/retrieval-ground-truth.jsonl --predictions datasets/fixtures/retrieval-predictions.jsonl --k 5
-python -m evalops benchmark miracl --language th --split dev --retriever bm25 --k 5 --mini
-```
-
-The MIRACL command uses the clearly labeled synthetic `miracl-th-mini`
-fixture; its perfect fixture score is not an official MIRACL result.
-
-## CLI examples
-
-Validate the labeled fixture and its document references:
-
-```bash
-python -m evalops dataset validate \
-  datasets/fixtures/thai-rag-sample.jsonl \
-  --document-catalog datasets/fixtures/document-catalog.txt
-```
-
-Run retrieval evaluation and print the JSON result:
-
-```bash
-python -m evalops retrieval evaluate \
-  --ground-truth datasets/fixtures/retrieval-ground-truth.jsonl \
-  --predictions datasets/fixtures/retrieval-predictions.jsonl \
-  --k 5 \
-  --run-id fixture-run-v1
-```
-
-The installed entry point is also available as `evalops ...` after installation.
-
-## Tests and CI
-
-```bash
-pytest
-ruff check .
-ruff format --check .
-mypy src
-```
-
-GitHub Actions runs the same lint, format, type, and test gates on pushes and pull requests without external API keys.
+offline fixtures, opt-in external preparation, HHEM setup, and artifact
+comparison.
 
 ## Roadmap
 
-- Phase 5B-L: completed owner-authorized full-population local LLM-as-a-Judge
-  benchmark; HHEM remains the default detector and Qwen3 local is
-  complementary.
-- Future: publish the frozen benchmark baseline and evidence.
+- Future: publish additional frozen benchmark baselines with their full
+  protocol and provenance.
 - Future: expand the curated Thai evaluation benchmark.
 - Future: add code-generation and code-migration evaluator adapters.
 
-## Limitations
+Interactive evaluation running, external production benchmarks, and provider
+inference are not presented as implemented features of the public console.
 
-The full MIRACL Thai dev BM25 run is not executed because the current
-in-memory index resource requirements were not safely established. HHEM CPU
-inference is slow, observed inputs reached approximately 2,723 tokens without
-adapter truncation, and HHEM-only threshold calibration/bootstrap intervals
-remain future work. The completed local RAGTruth result is protocol-specific
-and is not a leaderboard or universal generalization claim. The MIRACL and
-RAGTruth mini fixtures are synthetic and must not be presented as official
-benchmark performance. The five `thai-rag-eval-200` records are a seed
-fixture, not a 200-case benchmark.
+## Contributing, security, and license
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development gates and workflow,
+[SECURITY.md](SECURITY.md) for security boundaries, and [LICENSE](LICENSE) for
+the MIT license.
+
+## Known limitations
+
+The full MIRACL Thai dev BM25 run is not executed because the current in-memory
+index resource requirements were not safely established. HHEM CPU inference is
+slow, and threshold calibration/bootstrap intervals remain future work. The
+completed local RAGTruth result is protocol-specific and is not a leaderboard
+or universal generalization claim. MIRACL and RAGTruth mini fixtures are
+synthetic and must not be presented as official benchmark performance.
