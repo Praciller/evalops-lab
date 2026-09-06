@@ -1,24 +1,11 @@
-import Link from "next/link";
-
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ProductHeader } from "@/components/shell/product-header";
 
 export function EvidenceLayout({ children }: { children: React.ReactNode }) {
+  const storybookHref = process.env.GITHUB_PAGES === "true" ? "/evalops-lab/storybook/" : "/storybook/";
+
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      <header className="border-b border-line bg-surface/90">
-        <div className="page-shell flex items-center justify-between gap-4 py-4">
-          <Link className="focus-ring rounded-md" href="/">
-            <span className="block text-xs font-bold uppercase tracking-[0.16em] text-accent">
-              EvalOps Lab
-            </span>
-            <span className="block text-sm font-semibold text-ink">Evidence Console</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-muted sm:inline">Static · read-only</span>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      <ProductHeader storybookHref={storybookHref} />
       <main className="page-shell py-8 sm:py-12">{children}</main>
       <footer className="border-t border-line">
         <div className="page-shell flex flex-col gap-2 py-6 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">

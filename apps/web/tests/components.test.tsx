@@ -1,15 +1,55 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { usePathname } from "next/navigation";
 
 import { Overview } from "@/components/overview";
 import { ComparisonDetail } from "@/components/comparison-detail";
 import { FailureExplorer } from "@/components/failure-explorer";
 import { RunDetail } from "@/components/run-detail";
+import { ProductHeader } from "@/components/shell/product-header";
+import { EvidenceLayout } from "@/components/evidence-layout";
 import { ArtifactBadges } from "@/components/status-badges";
 import { getComparisonBundle, getRunArtifact } from "@/lib/evidence/repository";
 
+vi.mock("next/navigation", () => ({ usePathname: vi.fn() }));
+
+const mockedUsePathname = vi.mocked(usePathname);
+
 describe("Evidence Console components", () => {
+  beforeEach(() => {
+    mockedUsePathname.mockReturnValue("/");
+  });
+
+  it.each([
+    ["/", "Overview"],
+    ["/runs/demo-retrieval-fixture-v1/", "Runs"],
+    ["/comparisons/demo-retrieval-regression-v1/", "Comparisons"],
+  ])("marks %s as the active primary route", (pathname, activeLabel) => {
+    mockedUsePathname.mockReturnValue(pathname);
+    render(<ProductHeader storybookHref="/storybook/" />);
+
+    expect(screen.getByRole("link", { name: activeLabel })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Storybook" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("renders the complete product shell with a plain Storybook anchor and boundary footer", () => {
+    render(
+      <EvidenceLayout>
+        <p>Test content</p>
+      </EvidenceLayout>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Comparisons" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Storybook" })).toHaveAttribute("href", "/storybook/");
+    expect(screen.getByRole("button", { name: /theme/i })).toBeInTheDocument();
+    expect(screen.getByText("Public Evidence Contract V1 · explicit allowlist")).toBeInTheDocument();
+    expect(screen.getByText("No runtime API · no inference · no raw corpus")).toBeInTheDocument();
+  });
+
   it("renders overview identity, catalog summary, and safe run links", () => {
     render(<Overview />);
     expect(screen.getByRole("heading", { name: "Evidence Console" })).toBeInTheDocument();
