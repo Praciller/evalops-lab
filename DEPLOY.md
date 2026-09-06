@@ -68,6 +68,22 @@ Fresh production browser verification confirmed HTTP 200 for the Evidence Consol
 
 This release adds the Evidence Design System foundation and curated component catalog only. Existing public evidence remains `SYNTHETIC_FIXTURE` + `INTEGRATION_ONLY`; the Storybook does not expand the Public Evidence Contract or support benchmark/model-superiority claims.
 
+## Evidence Console Phase 5A.2 verified deployment
+
+- **Deployed commit:** `b4eda4394795aeaf83436ac406e50289f2f0bd1b`
+- **EvalOps CI:** `34020372319` — success
+- **Web Evidence Console CI:** `34020372287` — success
+- **GitHub Pages:** `34020372326` — success
+- **Runs catalog:** https://praciller.github.io/evalops-lab/runs/
+- **Comparisons catalog:** https://praciller.github.io/evalops-lab/comparisons/
+- **Public Storybook:** https://praciller.github.io/evalops-lab/storybook/
+
+Fresh production browser verification covered the Overview, filtered Runs and Comparisons catalogs, Comparison Detail, Failure Explorer, and a representative public Storybook story. The filtered Runs catalog rendered three verified synthetic artifacts and duplicate single-select query values remained inert. The filtered Comparisons catalog rendered the validated `MATCHED` comparison with four aggregate regressions and one pass. Comparison Detail retained the two-record change summary, while changed-only Failure Explorer results excluded `THQA-002` and included `THQA-004` and `THQA-005`.
+
+Axe reported zero violations on all checked surfaces. At 390 px, the Overview, Runs, Comparisons, Comparison Detail, Failure Explorer, and checked Storybook story had no root horizontal overflow. The production Storybook index still exposed exactly 12 curated public titles with zero internal/debug title leakage. No unexpected third-party runtime requests or HTTP >=400 responses were observed during the production smoke run.
+
+This remains `SYNTHETIC_FIXTURE` + `INTEGRATION_ONLY` evidence. URL filters are presentation state only and cannot override artifact semantics. Phase 5A.2 adds no runtime API, inference, authentication, persistence, analytics, database, or external data-fetch path.
+
 ## Redeploy
 
 An eligible change pushed to `main` triggers `.github/workflows/pages.yml`. The workflow can also be started with `workflow_dispatch`.

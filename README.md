@@ -10,9 +10,9 @@ EvalOps Lab treats AI evaluation as a software and data quality problem rather t
 
 [Repository](https://github.com/Praciller/evalops-lab) · [Live Evidence Console](https://praciller.github.io/evalops-lab/) · [Public Storybook](https://praciller.github.io/evalops-lab/storybook/)
 
-**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation · same-population regression comparison · record-level change inspection · evidence-focused UI design system · curated public Storybook.
+**What this demonstrates:** dataset and provenance validation · deterministic retrieval metrics · evaluator and failure-analysis separation · same-population regression comparison · record-level change inspection · evidence-focused UI design system · URL-driven evidence catalogs · curated public Storybook.
 
-[Comparison demo](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/) · [Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/)
+[Runs catalog](https://praciller.github.io/evalops-lab/runs/) · [Comparisons catalog](https://praciller.github.io/evalops-lab/comparisons/) · [Comparison demo](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/) · [Failure Explorer](https://praciller.github.io/evalops-lab/comparisons/demo-retrieval-regression-v1/failures/)
 
 **Boundary:** the hosted Evidence Console is static/read-only and currently exposes only synthetic integration evidence; it does not run evaluators or support model-superiority claims.
 
@@ -58,7 +58,11 @@ Evidence Console at `apps/web`; Phase 4 extends it with an evidence-safe
 comparison view and comparison-scoped Failure Explorer. The console reads only
 the checked-in explicit index at `apps/web/public/evidence/index.json`, which
 currently allowlists three synthetic run artifacts plus one synthetic comparison
-artifact. Evidence Console Phase 5A.1 also publishes a curated static Storybook at
+artifact. Evidence Console Phase 5A.2 adds static [Runs](https://praciller.github.io/evalops-lab/runs/)
+and [Comparisons](https://praciller.github.io/evalops-lab/comparisons/) catalogs with
+validated URL-driven presentation filters, browser-history navigation, and a
+shared product shell. Filter state never changes artifact truth and no catalog
+loads raw evidence in the browser. The curated static Storybook remains at
 [https://praciller.github.io/evalops-lab/storybook/](https://praciller.github.io/evalops-lab/storybook/);
 its public build uses an explicit allowlist and excludes internal/debug stories. It
 has no runtime API, inference, provider credentials, external data
