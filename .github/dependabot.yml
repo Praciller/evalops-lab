@@ -22,6 +22,17 @@ updates:
           - minor
           - patch
 
+  - package-ecosystem: npm
+    directory: /apps/workspace
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      routine-minor-patch:
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
