@@ -621,7 +621,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if error.name not in {"fastapi", "uvicorn", "multipart"}:
                 raise
             print(
-                'The local Workspace requires optional dependencies. Install them with '
+                "The local Workspace requires optional dependencies. Install them with "
                 'pip install "evalops-lab[workspace]".',
                 file=sys.stderr,
             )
