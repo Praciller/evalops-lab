@@ -134,3 +134,36 @@ def test_host_validation_applies_to_api_and_api_does_not_fall_through_to_spa(
     assert unknown_api.headers["content-type"].startswith("application/json")
     assert spa.status_code == 200
     assert "workspace" in spa.text
+
+
+def test_openapi_schema_matches_committed_file(tmp_path: Path) -> None:
+    """Ensure the committed openapi.json stays in sync with the FastAPI app."""
+    import json
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    committed_path = repo_root / "apps" / "workspace" / "openapi.json"
+    assert committed_path.is_file(), "apps/workspace/openapi.json must be committed"
+
+    # Build the same schema the export script produces
+    import tempfile
+
+    from evalops.workspace.security import BootstrapSessionManager, WorkspaceOrigin
+    from evalops.workspace.storage import WorkspaceStore
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = WorkspaceStore(_Path(tmp) / "root")
+        manager = BootstrapSessionManager(bootstrap_nonce="schema-export")
+        origin = WorkspaceOrigin(host="127.0.0.1", port=8000)
+        from evalops.workspace.api.app import create_workspace_app
+
+        app = create_workspace_app(store, manager, origin)
+        app.openapi_url = "/openapi.json"
+        schema = app.openapi()
+
+    generated = json.dumps(schema, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    committed = committed_path.read_text(encoding="utf-8")
+    assert generated == committed, (
+        "apps/workspace/openapi.json is out of sync with the FastAPI app. "
+        "Run: python scripts/export_workspace_openapi.py"
+    )
