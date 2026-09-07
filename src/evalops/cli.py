@@ -225,6 +225,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evidence_index.add_argument("--artifact", action="append", required=True, type=Path)
     evidence_index.add_argument("--output", required=True, type=Path)
+
+    workspace = commands.add_parser("workspace", help="Run the local evaluation workspace.")
+    workspace.add_argument("--root", type=Path)
+    workspace.add_argument("--port", type=int)
+    workspace.add_argument("--no-open", action="store_true")
     return parser
 
 
@@ -603,4 +608,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _evidence_export(args)
     if args.command == "evidence" and args.evidence_command == "index":
         return _evidence_index(args)
+    if args.command == "workspace":
+        try:
+            from evalops.workspace.cli import run_workspace_command
+
+            return run_workspace_command(
+                root=args.root,
+                port=args.port,
+                open_browser=not args.no_open,
+            )
+        except ModuleNotFoundError as error:
+            if error.name not in {"fastapi", "uvicorn", "multipart"}:
+                raise
+            print(
+                'The local Workspace requires optional dependencies. Install them with '
+                'pip install "evalops-lab[workspace]".',
+                file=sys.stderr,
+            )
+            return 2
     raise AssertionError("unhandled CLI command")

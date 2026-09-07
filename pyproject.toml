@@ -13,9 +13,15 @@ dependencies = ["pydantic>=2.7,<3"]
 
 [project.optional-dependencies]
 dev = [
+    "httpx>=0.28,<1",
     "mypy>=1.10",
     "pytest>=8.0",
     "ruff>=0.6",
+]
+workspace = [
+    "fastapi>=0.116,<1",
+    "python-multipart>=0.0.20,<1",
+    "uvicorn>=0.35,<1",
 ]
 hhem = [
     "transformers>=4.39.3,<4.40",
