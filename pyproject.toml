@@ -24,7 +24,7 @@ workspace = [
     "uvicorn>=0.35,<1",
 ]
 hhem = [
-    "transformers>=4.39.3,<4.40",
+    "transformers>=4.39.3,<5.17",
     "torch>=2.0,<3",
     "safetensors>=0.4,<1",
     "sentencepiece>=0.1.99,<1",
