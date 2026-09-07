@@ -75,8 +75,45 @@ test.describe("Bootstrap and workspace management", () => {
       });
     }, wsId);
 
-    // Reload — renamed workspace persists
+    // Reload — renamed workspace persists before restart
     await page.reload();
+    await expect(page.getByText("Renamed E2E Workspace")).toBeVisible({ timeout: 5000 });
+
+    // Prove real server-process restart with the same root directory
+    const pidRes = await page.request.get(`${BASE_URL}/__test__/pid`);
+    expect(pidRes.ok()).toBe(true);
+    const { pid: initialPid } = await pidRes.json();
+    expect(typeof initialPid).toBe("number");
+
+    // Trigger server-process restart
+    const restartRes = await page.request.post(`${BASE_URL}/__test__/restart`);
+    expect(restartRes.ok()).toBe(true);
+
+    // Wait for the new server process to come online with a distinct PID
+    await expect.poll(async () => {
+      try {
+        const res = await page.request.get(`${BASE_URL}/__test__/pid`);
+        if (!res.ok()) return null;
+        const data = await res.json();
+        return typeof data.pid === "number" && data.pid !== initialPid ? data.pid : null;
+      } catch {
+        return null;
+      }
+    }, {
+      message: "Server failed to restart with a new PID",
+      timeout: 15000,
+      intervals: [250, 500, 1000],
+    }).not.toBeNull();
+
+    // Server-process restart invalidates previous process-local session
+    const sessionRes = await page.request.get(`${BASE_URL}/api/v1/session`);
+    expect(sessionRes.status()).toBe(401);
+
+    // Re-authenticate against restarted server and verify persisted workspace
+    await page.goto(`${BASE_URL}/#bootstrap=${TEST_NONCE}`);
+    await expect(
+      page.getByRole("heading", { name: "Workspaces" })
+    ).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Renamed E2E Workspace")).toBeVisible({ timeout: 5000 });
   });
 });

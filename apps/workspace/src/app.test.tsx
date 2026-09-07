@@ -32,15 +32,29 @@ describe("App — LOCAL WORKSPACE identity", () => {
 
     // The banner must always be visible regardless of auth state
     expect(screen.getByText(/LOCAL WORKSPACE/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/No bootstrap token found/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/LOCAL WORKSPACE/)).toBeInTheDocument();
   });
 
   it("shows 'Data stays on this machine' text", async () => {
     render(<App />);
     expect(screen.getByText(/Data stays on this machine/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/No bootstrap token found/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Data stays on this machine/i)).toBeInTheDocument();
   });
 
-  it("does not contain public or hosted wording", () => {
+  it("does not contain public or hosted wording", async () => {
     render(<App />);
+    expect(document.body.textContent).not.toMatch(/public evidence console/i);
+    expect(document.body.textContent).not.toMatch(/GitHub Pages/i);
+    expect(document.body.textContent).not.toMatch(/hosted service/i);
+    await waitFor(() => {
+      expect(screen.getByText(/No bootstrap token found/i)).toBeInTheDocument();
+    });
     expect(document.body.textContent).not.toMatch(/public evidence console/i);
     expect(document.body.textContent).not.toMatch(/GitHub Pages/i);
     expect(document.body.textContent).not.toMatch(/hosted service/i);
