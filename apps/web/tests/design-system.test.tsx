@@ -25,7 +25,14 @@ const cssPath = path.join(process.cwd(), "src/app/globals.css");
 
 describe("Evidence Console design system", () => {
   it("publishes the semantic token families used by production and Storybook", () => {
-    const css = fs.readFileSync(cssPath, "utf8");
+    let css = fs.readFileSync(cssPath, "utf8");
+    const tokenImportMatch = css.match(/@import\s+["'](@evalops\/evidence-ui\/tokens\.css)["']/);
+    if (tokenImportMatch) {
+      const tokensPath = path.resolve(process.cwd(), "node_modules/@evalops/evidence-ui/tokens.css");
+      if (fs.existsSync(tokensPath)) {
+        css += "\n" + fs.readFileSync(tokensPath, "utf8");
+      }
+    }
 
     expect(css).toContain("--color-accent:");
     expect(css).toContain("--color-line-strong:");

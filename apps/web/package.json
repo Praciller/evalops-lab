@@ -20,6 +20,7 @@
     "test:e2e:pages": "node scripts/test-pages-e2e.mjs"
   },
   "dependencies": {
+    "@evalops/evidence-ui": "file:../../packages/evidence-ui",
     "geist": "^1.7.2",
     "next": "16.3.4",
     "react": "19.2.8",
