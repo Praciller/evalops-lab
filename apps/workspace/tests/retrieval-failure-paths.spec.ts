@@ -12,10 +12,12 @@ async function awaitGate(page: Page) {
 
 async function noPartialArtifacts(page: Page, ws: string, run: string) {
   const response = await page.request.get(
-    `${BASE_URL}/__test__/runs/${ws}/${run}/artifact-status`
+    `${BASE_URL}/__test__/artifacts/status`
   );
   expect(response.ok()).toBe(true);
-  expect(await response.json()).toEqual({ result: false, provenance: false });
+  expect(await response.json()).toEqual({
+    workspace_id: ws, run_id: run, result: false, provenance: false,
+  });
 }
 
 async function runReview(page: Page) {
@@ -96,20 +98,13 @@ test("real server restart interrupts in-flight job; authenticated retry uses new
   const ws = await createWorkspace(page, "Synthetic restart recovery");
   await uploadJsonl(page, "retrieval_ground_truth", "truth.jsonl", GT_JSONL);
   await uploadJsonl(page, "retrieval_predictions", "predictions.jsonl", PRED_JSONL);
-  const inputs = await (await page.request.get(
-    `${BASE_URL}/api/v1/workspaces/${ws}/inputs`
-  )).json();
-  const truth = inputs.inputs.find((x: { kind: string }) => x.kind === "retrieval_ground_truth");
-  const pred = inputs.inputs.find((x: { kind: string }) => x.kind === "retrieval_predictions");
   const seeded = await (await page.request.post(
     `${BASE_URL}/__test__/jobs/seed-transient`, {
-      data: {
-        workspace_id: ws,
-        ground_truth_input_id: truth.input_id,
-        predictions_input_id: pred.input_id,
-      },
+      data: { workspace_id: "../../untrusted", ground_truth_input_id: "input-untrusted" },
     }
   )).json();
+  // Arbitrary HTTP input cannot select filesystem identities in the test harness.
+  expect(seeded.workspace_id).toBe(ws);
   const pid = (await (await page.request.get(`${BASE_URL}/__test__/pid`)).json()).pid;
   await page.request.post(`${BASE_URL}/__test__/restart`);
   await expect.poll(async () => {

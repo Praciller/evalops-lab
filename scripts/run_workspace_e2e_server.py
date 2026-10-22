@@ -57,6 +57,7 @@ def _run_worker(port: int, nonce: str, root: Path) -> None:
         RetrievalRunService,
         create_retrieval_run,
     )
+    from evalops.workspace.ingestion.models import InputKind
     from evalops.workspace.jobs.models import JobRecord, JobState
 
     gate_enabled = threading.Event()
@@ -129,35 +130,54 @@ def _run_worker(port: int, nonce: str, root: Path) -> None:
         )
         return {"mutated": True}
 
+    def latest_test_workspace_id() -> str:
+        # Test-only: derive identity from owned disk state, never HTTP parameters.
+        workspaces = store.list_workspaces()
+        if not workspaces:
+            raise RuntimeError("E2E fixture requires a registered workspace")
+        return max(workspaces, key=lambda item: item.created_at).workspace_id
+
     @app.post("/__test__/jobs/seed-transient")
-    async def seed_transient(body: dict[str, str]) -> dict[str, str]:
+    async def seed_transient() -> dict[str, str]:
+        workspace_id = latest_test_workspace_id()
+        inputs = store.list_inputs(workspace_id)
+        ground = next(item for item in inputs if item.kind == InputKind.RETRIEVAL_GROUND_TRUTH)
+        predictions = next(item for item in inputs if item.kind == InputKind.RETRIEVAL_PREDICTIONS)
         snapshot = create_retrieval_run(
             store,
-            body["workspace_id"],
+            workspace_id,
             CreateRetrievalRun(
                 run_name="Synthetic interrupted run",
-                ground_truth_input_id=body["ground_truth_input_id"],
-                predictions_input_id=body["predictions_input_id"],
+                ground_truth_input_id=ground.input_id,
+                predictions_input_id=predictions.input_id,
                 top_k=2,
                 system_name="synthetic-e2e",
                 dataset_name="synthetic-fixture",
                 dataset_version="v1",
             ),
         )
-        job = JobRecord.queued(body["workspace_id"], snapshot.run_id)
+        job = JobRecord.queued(workspace_id, snapshot.run_id)
         store.save_job_record(job)
         store.update_job_record(
-            body["workspace_id"],
+            workspace_id,
             job.job_id,
             expected_revision=0,
             next_state=JobState.VALIDATING,
         )
-        return {"job_id": job.job_id, "run_id": snapshot.run_id}
+        return {"workspace_id": workspace_id, "job_id": job.job_id, "run_id": snapshot.run_id}
 
-    @app.get("/__test__/runs/{workspace_id}/{run_id}/artifact-status")
-    async def artifact_status(workspace_id: str, run_id: str) -> dict[str, bool]:
+    @app.get("/__test__/artifacts/status")
+    async def artifact_status() -> dict[str, str | bool]:
+        # Never accept path identifiers from unauthenticated fixture requests.
+        workspace_id = latest_test_workspace_id()
+        snapshots = store.list_run_snapshots(workspace_id)
+        if not snapshots:
+            raise RuntimeError("E2E fixture requires a run")
+        run_id = max(snapshots, key=lambda run: run.created_at).run_id
         directory = store._run_config_path(workspace_id, run_id).parent
         return {
+            "workspace_id": workspace_id,
+            "run_id": run_id,
             "result": (directory / "result.json").exists(),
             "provenance": (directory / "provenance.json").exists(),
         }
