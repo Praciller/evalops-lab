@@ -99,7 +99,12 @@ export default function RunResult() {
               <dt>EvalOps version</dt><dd>{run.evalops_version ?? "Pending completion"}</dd>
             </dl>
           </section>
-          <Link className="text-link" to={`/workspaces/${workspaceId}/runs`}>Back to runs</Link>
+          <div className="action-row">
+            {run.job_id && (
+              <Link className="text-link" to={`/jobs/${run.job_id}`}>View job status</Link>
+            )}
+            <Link className="text-link" to={`/workspaces/${workspaceId}/runs`}>Back to runs</Link>
+          </div>
         </>
       )}
     </div>

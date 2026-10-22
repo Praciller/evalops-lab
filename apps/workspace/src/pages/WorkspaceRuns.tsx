@@ -175,7 +175,10 @@ export default function WorkspaceRuns() {
           <ul className="input-list">{runs.map((run) => (
             <li key={run.run_id}>
               <div><strong>{run.run_name}</strong><p className="small-meta">K = {run.top_k} · {run.created_at.slice(0, 10)}</p></div>
-              <Link to={`/workspaces/${workspaceId}/runs/${run.run_id}`}>View run</Link>
+              <div className="action-row">
+                {run.job_id && <Link to={`/jobs/${run.job_id}`}>Job status</Link>}
+                <Link to={`/workspaces/${workspaceId}/runs/${run.run_id}`}>View run</Link>
+              </div>
             </li>
           ))}</ul>
         )}

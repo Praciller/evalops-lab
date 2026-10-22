@@ -51,9 +51,17 @@ def register_run_routes(
     @app.get("/api/v1/workspaces/{workspace_id}/runs", response_model=RunListResponse)
     def list_runs(request: Request, workspace_id: str) -> RunListResponse:
         require_session(request)
+        latest_jobs = {}
+        for job in sorted(
+            store.list_job_records(workspace_id),
+            key=lambda item: (item.created_at, item.job_id),
+        ):
+            latest_jobs[job.run_id] = job.job_id
         return RunListResponse(
             runs=[
-                RunSummary.from_snapshot(snapshot)
+                RunSummary.from_snapshot(snapshot).model_copy(
+                    update={"job_id": latest_jobs.get(snapshot.run_id)}
+                )
                 for snapshot in store.list_run_snapshots(workspace_id)
             ]
         )
@@ -76,18 +84,21 @@ def register_run_routes(
     def get_run(request: Request, workspace_id: str, run_id: str) -> RunSummary:
         require_session(request)
         snapshot = store.get_run_snapshot(workspace_id, run_id)
-        has_complete = any(
-            job.run_id == run_id and job.state == "COMPLETE"
-            for job in store.list_job_records(workspace_id)
+        jobs = sorted(
+            (job for job in store.list_job_records(workspace_id) if job.run_id == run_id),
+            key=lambda item: (item.created_at, item.job_id),
         )
+        latest_job_id = jobs[-1].job_id if jobs else None
+        has_complete = any(job.state == "COMPLETE" for job in jobs)
         if not has_complete:
-            return RunSummary.from_snapshot(snapshot)
+            return RunSummary.from_snapshot(snapshot).model_copy(update={"job_id": latest_job_id})
         result, provenance = store.get_run_artifacts(workspace_id, run_id)
         failures: dict[str, int] = {}
         for item in result.failures:
             failures[item.category.value] = failures.get(item.category.value, 0) + 1
         return RunSummary.from_snapshot(snapshot, metrics=result.metrics).model_copy(
             update={
+                "job_id": latest_job_id,
                 "failure_counts": failures,
                 "result_sha256": provenance.result_sha256,
                 "evalops_version": provenance.evalops_version,

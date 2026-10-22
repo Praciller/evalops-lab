@@ -161,6 +161,8 @@ def test_validate_enqueue_list_get_and_sse_terminal_revision(ctx: tuple) -> None
     fetched = client.get(f"/api/v1/workspaces/{ws}/runs/{run['run_id']}", headers=HEADERS)
     assert listed.status_code == fetched.status_code == 200
     assert len(listed.json()["runs"]) == 1
+    assert listed.json()["runs"][0]["job_id"] == run["job_id"]
+    assert fetched.json()["job_id"] == run["job_id"]
     assert "hit_rate_at_2" in fetched.json()["metrics"]
     assert fetched.json()["ground_truth_sha256"] == truth["content_sha256"]
     assert fetched.json()["predictions_sha256"] == pred["content_sha256"]
@@ -258,11 +260,18 @@ def test_queued_cancel_and_retry_api(ctx: tuple) -> None:
     cancelled = client.post(f"/api/v1/jobs/{queued.job_id}/cancel", headers=HEADERS)
     assert cancelled.status_code == 200, cancelled.text
     assert cancelled.json()["state"] == "CANCELLED"
+    before_retry = client.get(f"/api/v1/workspaces/{ws}/runs/{snapshot.run_id}", headers=HEADERS)
+    assert before_retry.json()["job_id"] == queued.job_id
+    assert before_retry.json()["metrics"] is None
     retry = client.post(f"/api/v1/jobs/{queued.job_id}/retry", headers=HEADERS)
     assert retry.status_code == 201, retry.text
     assert retry.json()["job_id"] != queued.job_id
     _wait(client, retry.json()["job_id"], "COMPLETE")
     assert store.get_job_record(ws, queued.job_id).state == "CANCELLED"
+    after_retry = client.get(f"/api/v1/workspaces/{ws}/runs/{snapshot.run_id}", headers=HEADERS)
+    assert after_retry.json()["job_id"] == retry.json()["job_id"]
+    listing = client.get(f"/api/v1/workspaces/{ws}/runs", headers=HEADERS)
+    assert listing.json()["runs"][0]["job_id"] == retry.json()["job_id"]
 
 
 def test_mutated_reference_blocks_validation_and_run_creation_without_leak(

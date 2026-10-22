@@ -107,6 +107,26 @@ describe("Guided input registration", () => {
 });
 
 describe("Constrained run review", () => {
+  it("reopens persisted Job progress from the saved Runs list", async () => {
+    vi.mocked(api.listRuns).mockResolvedValue([{
+      run_id: "run-one", workspace_id: "ws-demo", run_name: "Pending evaluation",
+      job_id: "job-one", ground_truth_input_id: ground.input_id,
+      predictions_input_id: prediction.input_id,
+      ground_truth_sha256: ground.content_sha256,
+      predictions_sha256: prediction.content_sha256,
+      evaluator_versions: { retrieval: "deterministic-v1" },
+      top_k: 2, system_name: "local", dataset_name: "synthetic",
+      dataset_version: "v1", created_at: "2026-10-01T00:00:00Z",
+      metrics: null, failure_counts: null, result_sha256: null, evalops_version: null,
+    }]);
+    mount("/workspaces/ws-demo/runs", <WorkspaceRuns />);
+    const link = await screen.findByRole("link", { name: "Job status" });
+    expect(link).toHaveAttribute("href", "/jobs/job-one");
+    fireEvent.click(link);
+    expect(screen.getByText("Arrived at job")).toBeInTheDocument();
+  });
+
+
   it("validates a real pair and reviews input digests before submitting", async () => {
     vi.mocked(api.listInputs).mockResolvedValue([ground, prediction]);
     vi.mocked(api.validatePair).mockResolvedValue({
@@ -155,7 +175,7 @@ describe("Persisted result interpretation", () => {
   it("renders only actual metrics, counts and hashes with local evidence label", async () => {
     vi.mocked(api.getRun).mockResolvedValue({
       run_id: "run-one", workspace_id: "ws-demo", run_name: "Fixture eval",
-      job_id: null, ground_truth_input_id: ground.input_id,
+      job_id: "job-one", ground_truth_input_id: ground.input_id,
       predictions_input_id: prediction.input_id,
       ground_truth_sha256: ground.content_sha256,
       predictions_sha256: prediction.content_sha256,
@@ -170,6 +190,7 @@ describe("Persisted result interpretation", () => {
     expect(await screen.findByText("Fixture eval")).toBeInTheDocument();
     expect(screen.getByText("LOCAL EVIDENCE — Not published")).toBeInTheDocument();
     expect(screen.getByText("Precision @2")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View job status" })).toHaveAttribute("href", "/jobs/job-one");
     expect(screen.getByText("RETRIEVAL_MISS")).toBeInTheDocument();
     expect(screen.getByText("c".repeat(64))).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/verified benchmark/i);
