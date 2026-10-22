@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import uuid
 from collections.abc import Mapping
@@ -12,6 +13,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from evalops.workspace.ingestion.models import InputManifest, InputSourceMode
 from evalops.workspace.models import (
     WORKSPACE_REGISTRY_SCHEMA_VERSION,
     WORKSPACE_SCHEMA_VERSION,
@@ -36,6 +38,13 @@ class UnsupportedSchemaVersionError(WorkspaceStorageError):
     """A persisted document uses a schema version this runtime cannot read."""
 
 
+class UnknownInputError(WorkspaceStorageError):
+    """A requested input does not belong to the selected workspace."""
+
+
+_INPUT_ID_RE = re.compile(r"^input-[0-9a-f]{32}$")
+
+
 def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
@@ -56,8 +65,25 @@ def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        temporary_path = Path(name)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 class WorkspaceStore:
-    """Persist only workspace metadata below an explicit local root."""
+    """Persist only Workspace-owned metadata below an explicit local root."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -120,6 +146,83 @@ class WorkspaceStore:
         )
         _atomic_write_json(self._workspace_path(workspace_id), renamed.model_dump(mode="json"))
         return renamed
+
+    def list_inputs(self, workspace_id: str) -> list[InputManifest]:
+        self.get_workspace(workspace_id)
+        directory = self._input_section(workspace_id, "manifests")
+        if not directory.exists():
+            return []
+        return [
+            self.get_input(workspace_id, path.stem) for path in sorted(directory.glob("*.json"))
+        ]
+
+    def get_input(self, workspace_id: str, input_id: str) -> InputManifest:
+        self.get_workspace(workspace_id)
+        path = self._input_manifest_path(workspace_id, input_id)
+        if not path.is_file() or path.is_symlink():
+            raise UnknownInputError("input is not registered in this workspace")
+        payload = _read_json(path)
+        _require_schema(payload, "workspace-input-v1")
+        try:
+            manifest = InputManifest.model_validate(payload)
+        except ValidationError as error:
+            raise WorkspaceStorageError("input manifest is invalid") from error
+        if manifest.input_id != input_id:
+            raise WorkspaceStorageError("input manifest identity mismatch")
+        return manifest
+
+    def save_input_manifest(self, workspace_id: str, manifest: InputManifest) -> None:
+        self.get_workspace(workspace_id)
+        path = self._input_manifest_path(workspace_id, manifest.input_id)
+        if path.exists() or path.is_symlink():
+            raise WorkspaceStorageError("input manifest is already registered")
+        if manifest.source_mode == InputSourceMode.IMPORTED:
+            expected = f"inputs/imported/{manifest.input_id}.jsonl"
+            if manifest.stored_relative_path != expected or manifest.source_path is not None:
+                raise WorkspaceStorageError("invalid imported input manifest")
+            if not self._imported_path(workspace_id, manifest.input_id).is_file():
+                raise WorkspaceStorageError("imported input content is missing")
+        elif manifest.source_path is None or manifest.stored_relative_path is not None:
+            raise WorkspaceStorageError("invalid referenced input manifest")
+        _atomic_write_json(path, manifest.model_dump(mode="json"))
+
+    def save_imported_input(self, workspace_id: str, input_id: str, data: bytes) -> str:
+        self.get_workspace(workspace_id)
+        path = self._imported_path(workspace_id, input_id)
+        if path.exists() or path.is_symlink():
+            raise WorkspaceStorageError("imported input already exists")
+        _atomic_write_bytes(path, data)
+        return f"inputs/imported/{input_id}.jsonl"
+
+    def discard_imported_input(self, workspace_id: str, input_id: str) -> None:
+        self.get_workspace(workspace_id)
+        self._imported_path(workspace_id, input_id).unlink(missing_ok=True)
+
+    def _inputs_directory(self, workspace_id: str) -> Path:
+        workspace_root = (self._workspaces_path / workspace_id).resolve()
+        if not workspace_root.is_relative_to(self._workspaces_path.resolve()):
+            raise WorkspaceStorageError("workspace directory is unsafe")
+        directory = workspace_root / "inputs"
+        if not directory.resolve().is_relative_to(workspace_root):
+            raise WorkspaceStorageError("workspace input directory is unsafe")
+        return directory
+
+    def _input_section(self, workspace_id: str, section: str) -> Path:
+        base = self._inputs_directory(workspace_id)
+        candidate = base / section
+        if not candidate.resolve().is_relative_to(base.resolve()):
+            raise WorkspaceStorageError("workspace input section is unsafe")
+        return candidate
+
+    def _input_manifest_path(self, workspace_id: str, input_id: str) -> Path:
+        if not _INPUT_ID_RE.fullmatch(input_id):
+            raise UnknownInputError("invalid input identifier")
+        return self._input_section(workspace_id, "manifests") / f"{input_id}.json"
+
+    def _imported_path(self, workspace_id: str, input_id: str) -> Path:
+        if not _INPUT_ID_RE.fullmatch(input_id):
+            raise UnknownInputError("invalid input identifier")
+        return self._input_section(workspace_id, "imported") / f"{input_id}.jsonl"
 
     def _load_registry(self) -> WorkspaceRegistry:
         if not self._registry_path.is_file():
