@@ -83,3 +83,28 @@ def test_missing_metric_is_explicit_and_fails_the_report() -> None:
 
     assert not report.passed
     assert report.comparisons[0].status == RegressionStatus.MISSING
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf"), True])
+@pytest.mark.parametrize("side", ["current", "baseline"])
+def test_invalid_metric_values_never_pass_regression(invalid: float | bool, side: str) -> None:
+    current: dict[str, float] = {"recall_at_5": 0.91}
+    baseline: dict[str, float] = {"recall_at_5": 0.90}
+    if side == "current":
+        current["recall_at_5"] = invalid
+    else:
+        baseline["recall_at_5"] = invalid
+
+    with pytest.raises(ValueError, match="must be a finite number"):
+        compare_metrics(current, baseline, [_rule()])
+
+
+@pytest.mark.parametrize("name", ["minimum_acceptable", "maximum_acceptable", "max_degradation"])
+def test_policy_rejects_non_finite_thresholds(name: str) -> None:
+    with pytest.raises(ValueError):
+        _rule(**{name: float("nan")})
+
+
+def test_empty_regression_policy_is_not_a_passing_report() -> None:
+    with pytest.raises(ValueError, match="at least one metric rule"):
+        compare_metrics({"recall_at_5": 0.9}, {"recall_at_5": 0.8}, [])
