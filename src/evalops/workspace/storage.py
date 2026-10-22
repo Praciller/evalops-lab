@@ -54,6 +54,14 @@ class UnknownInputError(WorkspaceStorageError):
     """A requested input does not belong to the selected workspace."""
 
 
+class UnknownRunError(WorkspaceStorageError):
+    """Run config is not available inside the selected Workspace."""
+
+
+class UnknownJobError(WorkspaceStorageError):
+    """Job does not exist or is not owned by the selected Workspace."""
+
+
 class InputHashChangedError(WorkspaceStorageError):
     """Referenced or imported content no longer matches its registered digest."""
 
@@ -311,6 +319,25 @@ class WorkspaceStore:
             raise WorkspaceStorageError("run snapshot already exists")
         _atomic_create_json(path, snapshot.model_dump(mode="json"))
 
+    def list_run_snapshots(self, workspace_id: str) -> list[RunSnapshot]:
+        """List only registered owned run configs; fail closed on malformed metadata."""
+
+        self.get_workspace(workspace_id)
+        workspace_root = (self._workspaces_path / workspace_id).resolve()
+        runs_root = workspace_root / "runs"
+        if not runs_root.resolve().is_relative_to(workspace_root):
+            raise WorkspaceStorageError("workspace runs directory is unsafe")
+        if not runs_root.exists():
+            return []
+        if not runs_root.is_dir():
+            raise WorkspaceStorageError("workspace runs directory is invalid")
+        snapshots = []
+        for item in sorted(runs_root.iterdir()):
+            if item.is_symlink() or not item.is_dir():
+                raise WorkspaceStorageError("unexpected run storage entry")
+            snapshots.append(self.get_run_snapshot(workspace_id, item.name))
+        return sorted(snapshots, key=lambda run: (run.created_at, run.run_id))
+
     def get_run_snapshot(self, workspace_id: str, run_id: str) -> RunSnapshot:
         """Load only the current workspace's persisted, versioned run snapshot."""
 
@@ -319,7 +346,7 @@ class WorkspaceStore:
         self.get_workspace(workspace_id)
         path = self._run_config_path(workspace_id, run_id)
         if not path.is_file() or path.is_symlink():
-            raise WorkspaceStorageError("run snapshot is unavailable")
+            raise UnknownRunError("run snapshot is unavailable")
         payload = _read_json(path)
         _require_schema(payload, "workspace-run-v1")
         try:
@@ -503,7 +530,7 @@ class WorkspaceStore:
         self.get_workspace(workspace_id)
         path = self._job_path(workspace_id, job_id)
         if not path.is_file() or path.is_symlink():
-            raise WorkspaceStorageError("job is unavailable")
+            raise UnknownJobError("job is unavailable")
         payload = _read_json(path)
         _require_schema(payload, "workspace-job-v1")
         try:
@@ -538,7 +565,7 @@ class WorkspaceStore:
             if record.job_id == job_id
         ]
         if len(matching) != 1:
-            raise WorkspaceStorageError("job is unavailable or ambiguous")
+            raise UnknownJobError("job is unavailable or ambiguous")
         return matching[0]
 
     def update_job_record(

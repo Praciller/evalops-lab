@@ -6,6 +6,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from evalops.workspace.application.runs import RunSnapshot
+from evalops.workspace.ingestion.models import InputKind, InputManifest
+from evalops.workspace.jobs.models import JobRecord, JobState, SafeJobError
 from evalops.workspace.models import WorkspaceRecord
 
 
@@ -54,3 +57,101 @@ class ErrorDetail(StrictModel):
 
 class ErrorResponse(StrictModel):
     error: ErrorDetail
+
+
+class InputSummary(StrictModel):
+    input_id: str
+    kind: str
+    source_mode: str
+    content_sha256: str
+    record_count: int
+    created_at: datetime
+
+    @classmethod
+    def from_manifest(cls, manifest: InputManifest) -> InputSummary:
+        return cls(
+            input_id=manifest.input_id,
+            kind=manifest.kind,
+            source_mode=manifest.source_mode,
+            content_sha256=manifest.content_sha256,
+            record_count=manifest.record_count,
+            created_at=manifest.created_at,
+        )
+
+
+class InputListResponse(StrictModel):
+    inputs: list[InputSummary]
+
+
+class ReferenceInputRequest(StrictModel):
+    kind: InputKind
+    path: str = Field(min_length=1, max_length=4096)
+
+
+class PairRequest(StrictModel):
+    ground_truth_input_id: str
+    predictions_input_id: str
+
+
+class PairResponse(StrictModel):
+    ground_truth_records: int
+    prediction_records: int
+    matching_query_count: int
+    missing_prediction_count: int
+    extra_prediction_count: int
+    blocking_codes: list[str]
+    warning_codes: list[str]
+
+
+class RunSummary(StrictModel):
+    run_id: str
+    workspace_id: str
+    run_name: str
+    job_id: str | None = None
+    ground_truth_input_id: str
+    predictions_input_id: str
+    top_k: int
+    system_name: str
+    dataset_name: str
+    dataset_version: str
+    created_at: datetime
+    metrics: dict[str, float] | None = None
+
+    @classmethod
+    def from_snapshot(
+        cls, snapshot: RunSnapshot, metrics: dict[str, float] | None = None
+    ) -> RunSummary:
+        return cls(
+            run_id=snapshot.run_id,
+            workspace_id=snapshot.workspace_id,
+            run_name=snapshot.run_name,
+            ground_truth_input_id=snapshot.ground_truth_input_id,
+            predictions_input_id=snapshot.predictions_input_id,
+            top_k=snapshot.config.top_k,
+            system_name=snapshot.config.system_name,
+            dataset_name=snapshot.config.dataset_name,
+            dataset_version=snapshot.config.dataset_version,
+            created_at=snapshot.created_at,
+            metrics=metrics,
+        )
+
+
+class RunListResponse(StrictModel):
+    runs: list[RunSummary]
+
+
+class JobSummary(StrictModel):
+    schema_version: str
+    job_id: str
+    workspace_id: str
+    run_id: str
+    state: JobState
+    revision: int
+    cancel_requested: bool
+    safe_error: SafeJobError | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_record(cls, record: JobRecord) -> JobSummary:
+        return cls.model_validate(record.model_dump(mode="python"))

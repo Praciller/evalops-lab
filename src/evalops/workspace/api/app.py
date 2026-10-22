@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,11 @@ from evalops.workspace.api.models import (
     WorkspaceNameRequest,
     WorkspaceSummary,
 )
+from evalops.workspace.api.routes_inputs import register_input_routes
+from evalops.workspace.api.routes_jobs import register_job_routes
+from evalops.workspace.api.routes_runs import register_run_routes
+from evalops.workspace.application.runs import RetrievalRunService
+from evalops.workspace.ingestion.models import InputValidationError
 from evalops.workspace.security import (
     BootstrapSessionManager,
     UnauthenticatedError,
@@ -29,7 +36,14 @@ from evalops.workspace.security import (
     validate_host_header,
     validate_mutating_origin,
 )
-from evalops.workspace.storage import UnknownWorkspaceError, WorkspaceStorageError, WorkspaceStore
+from evalops.workspace.storage import (
+    UnknownInputError,
+    UnknownJobError,
+    UnknownRunError,
+    UnknownWorkspaceError,
+    WorkspaceStorageError,
+    WorkspaceStore,
+)
 
 SESSION_COOKIE_NAME = "evalops_workspace_session"
 _CSP = (
@@ -47,7 +61,18 @@ def create_workspace_app(
     """Create an isolated application instance with injected storage/security state."""
 
     store.initialize()
+    run_service = RetrievalRunService(store)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        run_service.start()
+        try:
+            yield
+        finally:
+            run_service.stop()
+
     app = FastAPI(
+        lifespan=lifespan,
         title="EvalOps Local Workspace",
         version="1.0.0",
         docs_url=None,
@@ -71,9 +96,19 @@ def create_workspace_app(
         status_code = 401 if error.code in {"invalid_bootstrap", "unauthenticated"} else 403
         return _error_response(error.code, str(error), status_code)
 
+    @app.exception_handler(InputValidationError)
+    async def input_error_handler(_: Request, error: InputValidationError) -> JSONResponse:
+        return _error_response(error.code, str(error), 422)
+
     @app.exception_handler(WorkspaceStorageError)
     async def storage_error_handler(_: Request, error: WorkspaceStorageError) -> JSONResponse:
-        status_code = 404 if isinstance(error, UnknownWorkspaceError) else 500
+        status_code = (
+            404
+            if isinstance(
+                error, (UnknownWorkspaceError, UnknownInputError, UnknownRunError, UnknownJobError)
+            )
+            else 500
+        )
         return _error_response("workspace_storage_error", str(error), status_code)
 
     @app.exception_handler(RequestValidationError)
@@ -82,6 +117,8 @@ def create_workspace_app(
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_handler(_: Request, error: StarletteHTTPException) -> JSONResponse:
+        if error.status_code == 409:
+            return _error_response("invalid_job_state", "job operation is not available", 409)
         return _error_response("not_found", "resource not found", error.status_code)
 
     @app.exception_handler(Exception)
@@ -138,6 +175,16 @@ def create_workspace_app(
     async def health(request: Request) -> HealthResponse:
         _require_session(request, session_manager)
         return HealthResponse(status="ok")
+
+    def require_read(request: Request) -> None:
+        _require_session(request, session_manager)
+
+    def require_write(request: Request) -> None:
+        _require_mutation(request, session_manager, origin)
+
+    register_input_routes(app, store, require_read, require_write)
+    register_run_routes(app, store, run_service, require_read, require_write)
+    register_job_routes(app, store, run_service, require_read, require_write)
 
     if static_dir is not None:
         static_root = static_dir.resolve()

@@ -1,6 +1,57 @@
 {
   "components": {
     "schemas": {
+      "Body_csv_input_api_v1_workspaces__workspace_id__inputs_csv_post": {
+        "properties": {
+          "document_ids_column": {
+            "title": "Document Ids Column",
+            "type": "string"
+          },
+          "document_ids_delimiter": {
+            "default": "|",
+            "title": "Document Ids Delimiter",
+            "type": "string"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/InputKind"
+          },
+          "query_id_column": {
+            "title": "Query Id Column",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "query_id_column",
+          "document_ids_column",
+          "file"
+        ],
+        "title": "Body_csv_input_api_v1_workspaces__workspace_id__inputs_csv_post",
+        "type": "object"
+      },
+      "Body_upload_input_api_v1_workspaces__workspace_id__inputs_upload_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/InputKind"
+          }
+        },
+        "required": [
+          "kind",
+          "file"
+        ],
+        "title": "Body_upload_input_api_v1_workspaces__workspace_id__inputs_upload_post",
+        "type": "object"
+      },
       "BootstrapRequest": {
         "additionalProperties": false,
         "properties": {
@@ -14,6 +65,59 @@
           "nonce"
         ],
         "title": "BootstrapRequest",
+        "type": "object"
+      },
+      "CreateRetrievalRun": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Dataset Name",
+            "type": "string"
+          },
+          "dataset_version": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Dataset Version",
+            "type": "string"
+          },
+          "ground_truth_input_id": {
+            "title": "Ground Truth Input Id",
+            "type": "string"
+          },
+          "predictions_input_id": {
+            "title": "Predictions Input Id",
+            "type": "string"
+          },
+          "run_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Run Name",
+            "type": "string"
+          },
+          "system_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "System Name",
+            "type": "string"
+          },
+          "top_k": {
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_name",
+          "ground_truth_input_id",
+          "predictions_input_id",
+          "top_k",
+          "system_name",
+          "dataset_name",
+          "dataset_version"
+        ],
+        "title": "CreateRetrievalRun",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -41,6 +145,366 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "InputKind": {
+        "enum": [
+          "retrieval_ground_truth",
+          "retrieval_predictions"
+        ],
+        "title": "InputKind",
+        "type": "string"
+      },
+      "InputListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/InputSummary"
+            },
+            "title": "Inputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "inputs"
+        ],
+        "title": "InputListResponse",
+        "type": "object"
+      },
+      "InputSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "content_sha256": {
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "input_id": {
+            "title": "Input Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "record_count": {
+            "title": "Record Count",
+            "type": "integer"
+          },
+          "source_mode": {
+            "title": "Source Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_id",
+          "kind",
+          "source_mode",
+          "content_sha256",
+          "record_count",
+          "created_at"
+        ],
+        "title": "InputSummary",
+        "type": "object"
+      },
+      "JobState": {
+        "enum": [
+          "QUEUED",
+          "VALIDATING",
+          "EVALUATING",
+          "ANALYZING",
+          "WRITING_ARTIFACT",
+          "COMPLETE",
+          "FAILED",
+          "CANCELLED",
+          "INTERRUPTED"
+        ],
+        "title": "JobState",
+        "type": "string"
+      },
+      "JobSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "safe_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SafeJobError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/JobState"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "job_id",
+          "workspace_id",
+          "run_id",
+          "state",
+          "revision",
+          "cancel_requested",
+          "safe_error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobSummary",
+        "type": "object"
+      },
+      "PairRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ground_truth_input_id": {
+            "title": "Ground Truth Input Id",
+            "type": "string"
+          },
+          "predictions_input_id": {
+            "title": "Predictions Input Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ground_truth_input_id",
+          "predictions_input_id"
+        ],
+        "title": "PairRequest",
+        "type": "object"
+      },
+      "PairResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "blocking_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Codes",
+            "type": "array"
+          },
+          "extra_prediction_count": {
+            "title": "Extra Prediction Count",
+            "type": "integer"
+          },
+          "ground_truth_records": {
+            "title": "Ground Truth Records",
+            "type": "integer"
+          },
+          "matching_query_count": {
+            "title": "Matching Query Count",
+            "type": "integer"
+          },
+          "missing_prediction_count": {
+            "title": "Missing Prediction Count",
+            "type": "integer"
+          },
+          "prediction_records": {
+            "title": "Prediction Records",
+            "type": "integer"
+          },
+          "warning_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warning Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ground_truth_records",
+          "prediction_records",
+          "matching_query_count",
+          "missing_prediction_count",
+          "extra_prediction_count",
+          "blocking_codes",
+          "warning_codes"
+        ],
+        "title": "PairResponse",
+        "type": "object"
+      },
+      "ReferenceInputRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/InputKind"
+          },
+          "path": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "path"
+        ],
+        "title": "ReferenceInputRequest",
+        "type": "object"
+      },
+      "RunListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummary"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "RunListResponse",
+        "type": "object"
+      },
+      "RunSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_name": {
+            "title": "Dataset Name",
+            "type": "string"
+          },
+          "dataset_version": {
+            "title": "Dataset Version",
+            "type": "string"
+          },
+          "ground_truth_input_id": {
+            "title": "Ground Truth Input Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics"
+          },
+          "predictions_input_id": {
+            "title": "Predictions Input Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_name": {
+            "title": "Run Name",
+            "type": "string"
+          },
+          "system_name": {
+            "title": "System Name",
+            "type": "string"
+          },
+          "top_k": {
+            "title": "Top K",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "workspace_id",
+          "run_name",
+          "ground_truth_input_id",
+          "predictions_input_id",
+          "top_k",
+          "system_name",
+          "dataset_name",
+          "dataset_version",
+          "created_at"
+        ],
+        "title": "RunSummary",
+        "type": "object"
+      },
+      "SafeJobError": {
+        "additionalProperties": false,
+        "description": "A safe code/message pair; raw input, exceptions and local paths are forbidden.",
+        "properties": {
+          "code": {
+            "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "SafeJobError",
         "type": "object"
       },
       "SessionInfo": {
@@ -190,6 +654,160 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "get": {
+        "operationId": "get_job_api_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job"
+      }
+    },
+    "/api/v1/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_job_api_v1_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Job"
+      }
+    },
+    "/api/v1/jobs/{job_id}/events": {
+      "get": {
+        "operationId": "stream_job_api_v1_jobs__job_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Job"
+      }
+    },
+    "/api/v1/jobs/{job_id}/retry": {
+      "post": {
+        "operationId": "retry_job_api_v1_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Job"
       }
     },
     "/api/v1/session": {
@@ -386,6 +1004,423 @@
           }
         },
         "summary": "Rename Workspace"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inputs": {
+      "get": {
+        "operationId": "list_inputs_api_v1_workspaces__workspace_id__inputs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Inputs"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inputs/csv": {
+      "post": {
+        "operationId": "csv_input_api_v1_workspaces__workspace_id__inputs_csv_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_csv_input_api_v1_workspaces__workspace_id__inputs_csv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Csv Input"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inputs/reference": {
+      "post": {
+        "operationId": "reference_input_api_v1_workspaces__workspace_id__inputs_reference_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferenceInputRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reference Input"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inputs/upload": {
+      "post": {
+        "operationId": "upload_input_api_v1_workspaces__workspace_id__inputs_upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_input_api_v1_workspaces__workspace_id__inputs_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Input"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inputs/{input_id}": {
+      "get": {
+        "operationId": "get_input_api_v1_workspaces__workspace_id__inputs__input_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "input_id",
+            "required": true,
+            "schema": {
+              "title": "Input Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InputSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Input"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/runs": {
+      "get": {
+        "operationId": "list_runs_api_v1_workspaces__workspace_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs"
+      },
+      "post": {
+        "operationId": "create_run_api_v1_workspaces__workspace_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRetrievalRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Run"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/runs/validate": {
+      "post": {
+        "operationId": "validate_pair_api_v1_workspaces__workspace_id__runs_validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Pair"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/runs/{run_id}": {
+      "get": {
+        "operationId": "get_run_api_v1_workspaces__workspace_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run"
       }
     }
   }
