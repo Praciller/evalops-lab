@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { WorkspaceSummary } from "./api/schemas";
 import JobProgress from "./pages/JobProgress";
 import RunResult from "./pages/RunResult";
@@ -20,7 +20,9 @@ function PlannedSection({ title }: { title: string }) {
 type Props = { overview: ReactNode; workspaces: WorkspaceSummary[] };
 
 export function WorkspaceRoutes({ overview, workspaces }: Props) {
-  const selectedWorkspace = workspaces[0]?.workspace_id;
+  const location = useLocation();
+  const activeWorkspace = location.pathname.match(/^\/workspaces\/([^/]+)\//)?.[1];
+  const selectedWorkspace = activeWorkspace ?? workspaces[0]?.workspace_id;
   return (
     <>
       <nav className="workspace-nav" aria-label="Workspace navigation">

@@ -63,6 +63,24 @@ afterEach(() => {
 });
 
 describe("Job progress via persisted state and SSE", () => {
+  it("does not overwrite a newer SSE revision with a delayed older REST response", async () => {
+    let resolveGet!: (job: Awaited<ReturnType<typeof api.getJob>>) => void;
+    vi.mocked(api.getJob).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveGet = resolve;
+    }));
+    showJob();
+    await waitFor(() => expect(FakeEvents.opened).toHaveLength(1));
+    const source = FakeEvents.opened[0];
+    act(() => source.emit("job", { ...baseJob, state: "EVALUATING", revision: 3 }));
+    expect(await screen.findByText("EVALUATING", { selector: ".status-text" })).toBeInTheDocument();
+    await act(async () => { resolveGet({ ...baseJob, state: "QUEUED", revision: 0 }); });
+    expect(screen.getByText("EVALUATING", { selector: ".status-text" })).toBeInTheDocument();
+    act(() => source.emit("job", { ...baseJob, state: "VALIDATING", revision: 1 }));
+    expect(screen.getByText("EVALUATING", { selector: ".status-text" })).toBeInTheDocument();
+    act(() => source.emit("job", baseJob));
+    expect(await screen.findByText("COMPLETE", { selector: ".status-text" })).toBeInTheDocument();
+  });
+
   it("loads saved COMPLETE state and links only to local run result", async () => {
     vi.mocked(api.getJob).mockResolvedValue(baseJob);
     showJob();

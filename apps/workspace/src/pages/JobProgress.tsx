@@ -16,7 +16,7 @@ export default function JobProgress() {
   const refresh = useCallback(async () => {
     try {
       const latest = await getJob(jobId);
-      setJob(latest);
+      setJob((old) => old?.job_id === latest.job_id && old.revision > latest.revision ? old : latest);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load job state.");
@@ -31,7 +31,7 @@ export default function JobProgress() {
       if (!live) return;
       try {
         const parsed = JobSummarySchema.parse(JSON.parse((event as MessageEvent).data));
-        setJob(parsed);
+        setJob((old) => old?.job_id === parsed.job_id && old.revision > parsed.revision ? old : parsed);
         if (TERMINAL.has(parsed.state)) stream.close();
       } catch {
         setError("Job event validation failed. Refresh to reload persisted state.");
@@ -44,7 +44,8 @@ export default function JobProgress() {
   async function cancel() {
     setBusy(true); setError(null);
     try {
-      setJob(await cancelJob(jobId));
+      const updated = await cancelJob(jobId);
+      setJob((old) => old?.job_id === updated.job_id && old.revision > updated.revision ? old : updated);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Cancellation failed.");
     } finally { setBusy(false); }
