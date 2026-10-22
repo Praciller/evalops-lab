@@ -293,9 +293,11 @@ class WorkspaceStore:
                     raise WorkspaceStorageError("referenced input content is unavailable")
                 if path.stat().st_size > MAX_INPUT_BYTES:
                     raise InputHashChangedError("referenced input exceeds 10 MiB limit")
-            data = path.read_bytes()
-            if manifest.source_mode == InputSourceMode.REFERENCED and len(data) > MAX_INPUT_BYTES:
-                raise InputHashChangedError("referenced input exceeds 10 MiB limit")
+            # Never trust a size check alone: bound reads even if the file grows.
+            with path.open("rb") as handle:
+                data = handle.read(MAX_INPUT_BYTES + 1)
+            if len(data) > MAX_INPUT_BYTES:
+                raise InputHashChangedError("registered input exceeds 10 MiB limit")
         except (OSError, RuntimeError) as error:
             raise WorkspaceStorageError("registered input cannot be read") from error
         if hashlib.sha256(data).hexdigest() != manifest.content_sha256:

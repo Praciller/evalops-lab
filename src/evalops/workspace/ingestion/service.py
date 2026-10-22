@@ -125,7 +125,9 @@ def register_referenced_jsonl(
             raise InputValidationError("NOT_A_FILE", "referenced input must be a regular file")
         if resolved.stat().st_size > MAX_INPUT_BYTES:
             raise InputValidationError("INPUT_TOO_LARGE", "input exceeds 10 MiB limit")
-        data = resolved.read_bytes()
+        # A file may grow after stat(): always bound the actual read.
+        with resolved.open("rb") as handle:
+            data = handle.read(MAX_INPUT_BYTES + 1)
         if len(data) > MAX_INPUT_BYTES:
             raise InputValidationError("INPUT_TOO_LARGE", "input exceeds 10 MiB limit")
     except InputValidationError:

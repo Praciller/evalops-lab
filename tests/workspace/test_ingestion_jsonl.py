@@ -195,14 +195,14 @@ def test_unreadable_reference_is_a_safe_error(
     store, workspace_id, _ = workspace
     source = tmp_path / "read-error.jsonl"
     source.write_bytes(GT)
-    original = Path.read_bytes
+    original_open = Path.open
 
-    def deny(path: Path) -> bytes:
-        if path == source:
+    def deny(path: Path, mode: str = "r", *args: object, **kwargs: object):
+        if path == source and mode == "rb":
             raise PermissionError("SENSITIVE local path")
-        return original(path)
+        return original_open(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "read_bytes", deny)
+    monkeypatch.setattr(Path, "open", deny)
     with pytest.raises(InputValidationError) as caught:
         register_referenced_jsonl(
             store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
@@ -287,3 +287,41 @@ def test_referenced_file_size_is_bounded_on_registration_and_runtime(
     assert caught.value.code == "INPUT_TOO_LARGE"
     assert "too-large-after-import" not in str(caught.value)
     assert len(store.list_inputs(workspace_id)) == 1
+
+
+def test_reference_read_cap_survives_file_growth_after_stat(
+    workspace: tuple[WorkspaceStore, str, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+
+    store, workspace_id, _ = workspace
+    source = tmp_path / "grow-after-stat.jsonl"
+    source.write_bytes(GT)
+    registered = register_referenced_jsonl(
+        store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+    )
+    original_open = Path.open
+    read_sizes: list[int] = []
+
+    class GrowingReader(io.BytesIO):
+        def read(self, size: int = -1) -> bytes:
+            read_sizes.append(size)
+            assert size == MAX_INPUT_BYTES + 1, "file read must be bounded"
+            return super().read(size)
+
+    def changed_open(path: Path, mode: str = "r", *args: object, **kwargs: object):
+        if path == source and mode == "rb":
+            return GrowingReader(b"x" * (MAX_INPUT_BYTES + 1))
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", changed_open)
+    with pytest.raises(InputHashChangedError, match="10 MiB"):
+        store.read_input_bytes(workspace_id, registered.manifest.input_id)
+    with pytest.raises(InputValidationError) as caught:
+        register_referenced_jsonl(
+            store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+        )
+    assert caught.value.code == "INPUT_TOO_LARGE"
+    assert read_sizes == [MAX_INPUT_BYTES + 1, MAX_INPUT_BYTES + 1]
