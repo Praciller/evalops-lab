@@ -54,12 +54,17 @@ class UnknownInputError(WorkspaceStorageError):
     """A requested input does not belong to the selected workspace."""
 
 
+class InputHashChangedError(WorkspaceStorageError):
+    """Referenced or imported content no longer matches its registered digest."""
+
+
 _INPUT_ID_RE = re.compile(r"^input-[0-9a-f]{32}$")
 _RUN_ID_RE = re.compile(r"^run-[0-9a-f]{32}$")
 _JOB_ID_RE = re.compile(r"^job-[0-9a-f]{32}$")
 
 if TYPE_CHECKING:
-    from evalops.workspace.application.runs import RunSnapshot
+    from evalops.models.runs import EvaluationResult
+    from evalops.workspace.application.runs import RunProvenance, RunSnapshot
 
 
 def _replace_with_windows_retry(source: Path, destination: Path) -> None:
@@ -277,7 +282,7 @@ class WorkspaceStore:
         except (OSError, RuntimeError) as error:
             raise WorkspaceStorageError("registered input cannot be read") from error
         if hashlib.sha256(data).hexdigest() != manifest.content_sha256:
-            raise WorkspaceStorageError("registered input checksum has changed")
+            raise InputHashChangedError("registered input checksum has changed")
         return data
 
     def save_run_snapshot(self, workspace_id: str, snapshot: RunSnapshot) -> None:
@@ -340,6 +345,127 @@ class WorkspaceStore:
         if not directory.resolve().is_relative_to(runs_root.resolve()):
             raise WorkspaceStorageError("run directory is unsafe")
         return directory / "config.json"
+
+    def write_run_artifacts(
+        self,
+        workspace_id: str,
+        job_id: str,
+        result_bytes: bytes,
+        provenance: RunProvenance | None,
+    ) -> None:
+        """Commit local evidence only from WRITING_ARTIFACT; never overwrite COMPLETE."""
+
+        from evalops.models.runs import EvaluationResult
+        from evalops.workspace.application.runs import RunProvenance
+
+        with self._job_lock:
+            job = self.get_job_record(workspace_id, job_id)
+            if job.state != JobState.WRITING_ARTIFACT or job.cancel_requested:
+                raise WorkspaceStorageError("job is not eligible for artifact promotion")
+            if not isinstance(provenance, RunProvenance):
+                raise WorkspaceStorageError("run provenance is required")
+            snapshot = self.get_run_snapshot(workspace_id, job.run_id)
+            try:
+                result = EvaluationResult.model_validate_json(result_bytes)
+            except ValidationError as error:
+                raise WorkspaceStorageError("result payload is invalid") from error
+            if result.run != snapshot.config:
+                raise WorkspaceStorageError("result config differs from immutable run snapshot")
+            if (
+                provenance.run_id != snapshot.run_id
+                or provenance.ground_truth_input_id != snapshot.ground_truth_input_id
+                or provenance.predictions_input_id != snapshot.predictions_input_id
+                or provenance.ground_truth_content_sha256 != snapshot.ground_truth_content_sha256
+                or provenance.predictions_content_sha256 != snapshot.predictions_content_sha256
+                or provenance.evaluator_versions != snapshot.config.evaluator_versions
+                or provenance.git_commit != snapshot.config.git_commit
+                or provenance.result_sha256 != hashlib.sha256(result_bytes).hexdigest()
+            ):
+                raise WorkspaceStorageError("run artifact provenance integrity mismatch")
+            for previous in self.list_job_records(workspace_id):
+                if previous.run_id == job.run_id and previous.state == JobState.COMPLETE:
+                    raise WorkspaceStorageError("completed run evidence is immutable")
+            run_dir = self._run_config_path(workspace_id, job.run_id).parent
+            result_path, provenance_path = run_dir / "result.json", run_dir / "provenance.json"
+            if result_path.exists() or provenance_path.exists():
+                raise WorkspaceStorageError("run evidence already exists")
+            try:
+                _atomic_create_bytes(result_path, result_bytes)
+                _atomic_create_json(provenance_path, provenance.model_dump(mode="json"))
+                self.update_job_record(
+                    workspace_id,
+                    job_id,
+                    expected_revision=job.revision,
+                    next_state=JobState.COMPLETE,
+                )
+            except Exception:
+                # A failure before COMPLETE cannot expose a partial canonical pair.
+                if self.get_job_record(workspace_id, job_id).state != JobState.COMPLETE:
+                    provenance_path.unlink(missing_ok=True)
+                    result_path.unlink(missing_ok=True)
+                raise
+
+    def get_run_artifacts(
+        self, workspace_id: str, run_id: str
+    ) -> tuple[EvaluationResult, RunProvenance]:
+        """Verify immutable result checksum and provenance for a COMPLETE local job."""
+
+        from evalops.models.runs import EvaluationResult
+        from evalops.workspace.application.runs import RunProvenance
+
+        with self._job_lock:
+            snapshot = self.get_run_snapshot(workspace_id, run_id)
+            completed = [
+                job
+                for job in self.list_job_records(workspace_id)
+                if job.run_id == run_id and job.state == JobState.COMPLETE
+            ]
+            if len(completed) != 1:
+                raise WorkspaceStorageError("completed run evidence is unavailable")
+            run_dir = self._run_config_path(workspace_id, run_id).parent
+            result_path, provenance_path = run_dir / "result.json", run_dir / "provenance.json"
+            if not result_path.is_file() or not provenance_path.is_file():
+                raise WorkspaceStorageError("run evidence is incomplete")
+            if result_path.is_symlink() or provenance_path.is_symlink():
+                raise WorkspaceStorageError("run evidence paths are unsafe")
+            try:
+                bytes_data = result_path.read_bytes()
+                raw_provenance = _read_json(provenance_path)
+                provenance = RunProvenance.model_validate(raw_provenance)
+                if provenance.result_sha256 != hashlib.sha256(bytes_data).hexdigest():
+                    raise WorkspaceStorageError("run evidence checksum mismatch")
+                result = EvaluationResult.model_validate_json(bytes_data)
+            except (OSError, ValidationError, ValueError) as error:
+                raise WorkspaceStorageError("run evidence is invalid") from error
+            if (
+                result.run != snapshot.config
+                or provenance.run_id != run_id
+                or provenance.ground_truth_input_id != snapshot.ground_truth_input_id
+                or provenance.predictions_input_id != snapshot.predictions_input_id
+                or provenance.ground_truth_content_sha256 != snapshot.ground_truth_content_sha256
+                or provenance.predictions_content_sha256 != snapshot.predictions_content_sha256
+                or provenance.evaluator_versions != snapshot.config.evaluator_versions
+                or provenance.git_commit != snapshot.config.git_commit
+            ):
+                raise WorkspaceStorageError("run evidence does not match its snapshot")
+            return result, provenance
+
+    def discard_unfinished_run_artifacts(self, workspace_id: str, run_id: str) -> None:
+        """Clean crash-left provisional evidence only when no job is active/COMPLETE."""
+
+        with self._job_lock:
+            self.get_run_snapshot(workspace_id, run_id)
+            for job in self.list_job_records(workspace_id):
+                if job.run_id == run_id and job.state == JobState.COMPLETE:
+                    raise WorkspaceStorageError("completed run evidence is immutable")
+                if job.run_id == run_id and job.state not in TERMINAL_STATES:
+                    raise WorkspaceStorageError("run has an active job")
+            run_dir = self._run_config_path(workspace_id, run_id).parent
+            for name in ("result.json", "provenance.json"):
+                path = run_dir / name
+                if path.is_symlink():
+                    raise WorkspaceStorageError("run evidence path is unsafe")
+                path.unlink(missing_ok=True)
 
     def _jobs_directory(self, workspace_id: str) -> Path:
         self.get_workspace(workspace_id)
