@@ -28,11 +28,13 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install --upgrade pip && python -m pip install -e '.[dev,workspace]'
       - name: Python lint
-        run: ruff check src/evalops/workspace tests/workspace scripts/export_workspace_openapi.py scripts/run_workspace_e2e_server.py
+        run: ruff check .
+      - name: Python formatting
+        run: ruff format --check .
       - name: Python type check
         run: mypy src
-      - name: Workspace Python tests
-        run: pytest tests/workspace
+      - name: Full Python tests (including Workspace/API)
+        run: pytest
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
