@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -10,10 +11,11 @@ import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from evalops.workspace.ingestion.models import InputManifest, InputSourceMode
+from evalops.workspace.ingestion.models import InputKind, InputManifest, InputSourceMode
 from evalops.workspace.models import (
     WORKSPACE_REGISTRY_SCHEMA_VERSION,
     WORKSPACE_SCHEMA_VERSION,
@@ -43,6 +45,10 @@ class UnknownInputError(WorkspaceStorageError):
 
 
 _INPUT_ID_RE = re.compile(r"^input-[0-9a-f]{32}$")
+_RUN_ID_RE = re.compile(r"^run-[0-9a-f]{32}$")
+
+if TYPE_CHECKING:
+    from evalops.workspace.application.runs import RunSnapshot
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
@@ -80,6 +86,35 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def _atomic_create_bytes(path: Path, data: bytes) -> None:
+    """Atomically create immutable content without overwriting an existing file."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        temporary_path = Path(name)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            # Same-filesystem hard link is an atomic create-if-absent on NTFS/POSIX.
+            os.link(temporary_path, path)
+        except FileExistsError as error:
+            raise WorkspaceStorageError("immutable workspace record already exists") from error
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _atomic_create_json(path: Path, payload: Mapping[str, object]) -> None:
+    data = (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    _atomic_create_bytes(path, data)
 
 
 class WorkspaceStore:
@@ -184,19 +219,102 @@ class WorkspaceStore:
                 raise WorkspaceStorageError("imported input content is missing")
         elif manifest.source_path is None or manifest.stored_relative_path is not None:
             raise WorkspaceStorageError("invalid referenced input manifest")
-        _atomic_write_json(path, manifest.model_dump(mode="json"))
+        _atomic_create_json(path, manifest.model_dump(mode="json"))
 
     def save_imported_input(self, workspace_id: str, input_id: str, data: bytes) -> str:
         self.get_workspace(workspace_id)
         path = self._imported_path(workspace_id, input_id)
         if path.exists() or path.is_symlink():
             raise WorkspaceStorageError("imported input already exists")
-        _atomic_write_bytes(path, data)
+        _atomic_create_bytes(path, data)
         return f"inputs/imported/{input_id}.jsonl"
 
     def discard_imported_input(self, workspace_id: str, input_id: str) -> None:
         self.get_workspace(workspace_id)
         self._imported_path(workspace_id, input_id).unlink(missing_ok=True)
+
+    def read_input_bytes(self, workspace_id: str, input_id: str) -> bytes:
+        """Read an owned source, refusing checksum drift before run creation/execution."""
+
+        manifest = self.get_input(workspace_id, input_id)
+        try:
+            if manifest.source_mode == InputSourceMode.IMPORTED:
+                path = self._imported_path(workspace_id, input_id)
+                if path.is_symlink() or not path.is_file():
+                    raise WorkspaceStorageError("imported input content is unavailable")
+            else:
+                if manifest.source_path is None:
+                    raise WorkspaceStorageError("referenced input has no source")
+                path = Path(manifest.source_path).resolve(strict=True)
+                if not path.is_file():
+                    raise WorkspaceStorageError("referenced input content is unavailable")
+            data = path.read_bytes()
+        except (OSError, RuntimeError) as error:
+            raise WorkspaceStorageError("registered input cannot be read") from error
+        if hashlib.sha256(data).hexdigest() != manifest.content_sha256:
+            raise WorkspaceStorageError("registered input checksum has changed")
+        return data
+
+    def save_run_snapshot(self, workspace_id: str, snapshot: RunSnapshot) -> None:
+        """Create, but never replace, an owned immutable run config."""
+
+        self.get_workspace(workspace_id)
+        if snapshot.workspace_id != workspace_id or snapshot.config.run_id != snapshot.run_id:
+            raise WorkspaceStorageError("run snapshot ownership or identity mismatch")
+        for input_id, expected_hash, expected_kind in (
+            (
+                snapshot.ground_truth_input_id,
+                snapshot.ground_truth_content_sha256,
+                InputKind.RETRIEVAL_GROUND_TRUTH,
+            ),
+            (
+                snapshot.predictions_input_id,
+                snapshot.predictions_content_sha256,
+                InputKind.RETRIEVAL_PREDICTIONS,
+            ),
+        ):
+            manifest = self.get_input(workspace_id, input_id)
+            if manifest.kind != expected_kind or manifest.content_sha256 != expected_hash:
+                raise WorkspaceStorageError("run snapshot input integrity mismatch")
+        path = self._run_config_path(workspace_id, snapshot.run_id)
+        if path.exists() or path.is_symlink():
+            raise WorkspaceStorageError("run snapshot already exists")
+        _atomic_create_json(path, snapshot.model_dump(mode="json"))
+
+    def get_run_snapshot(self, workspace_id: str, run_id: str) -> RunSnapshot:
+        """Load only the current workspace's persisted, versioned run snapshot."""
+
+        from evalops.workspace.application.runs import RunSnapshot
+
+        self.get_workspace(workspace_id)
+        path = self._run_config_path(workspace_id, run_id)
+        if not path.is_file() or path.is_symlink():
+            raise WorkspaceStorageError("run snapshot is unavailable")
+        payload = _read_json(path)
+        _require_schema(payload, "workspace-run-v1")
+        try:
+            snapshot = RunSnapshot.model_validate(payload)
+        except ValidationError as error:
+            raise WorkspaceStorageError("run snapshot is invalid") from error
+        if snapshot.workspace_id != workspace_id or snapshot.run_id != run_id:
+            raise WorkspaceStorageError("run snapshot ownership or identity mismatch")
+        if snapshot.config.run_id != run_id:
+            raise WorkspaceStorageError("run snapshot config identity mismatch")
+        return snapshot
+
+    def _run_config_path(self, workspace_id: str, run_id: str) -> Path:
+        if not _RUN_ID_RE.fullmatch(run_id):
+            raise WorkspaceStorageError("run identifier is invalid")
+        workspace_root = (self._workspaces_path / workspace_id).resolve()
+        if not workspace_root.is_relative_to(self._workspaces_path.resolve()):
+            raise WorkspaceStorageError("workspace directory is unsafe")
+        runs_root = workspace_root / "runs"
+        if not runs_root.resolve().is_relative_to(workspace_root):
+            raise WorkspaceStorageError("workspace runs directory is unsafe")
+        directory = runs_root / run_id
+        if not directory.resolve().is_relative_to(runs_root.resolve()):
+            raise WorkspaceStorageError("run directory is unsafe")
+        return directory / "config.json"
 
     def _inputs_directory(self, workspace_id: str) -> Path:
         workspace_root = (self._workspaces_path / workspace_id).resolve()
