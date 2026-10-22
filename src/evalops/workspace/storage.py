@@ -17,7 +17,12 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from evalops.workspace.ingestion.models import InputKind, InputManifest, InputSourceMode
+from evalops.workspace.ingestion.models import (
+    MAX_INPUT_BYTES,
+    InputKind,
+    InputManifest,
+    InputSourceMode,
+)
 from evalops.workspace.jobs.models import (
     ALLOWED_TRANSITIONS,
     TERMINAL_STATES,
@@ -286,7 +291,11 @@ class WorkspaceStore:
                 path = Path(manifest.source_path).resolve(strict=True)
                 if not path.is_file():
                     raise WorkspaceStorageError("referenced input content is unavailable")
+                if path.stat().st_size > MAX_INPUT_BYTES:
+                    raise InputHashChangedError("referenced input exceeds 10 MiB limit")
             data = path.read_bytes()
+            if manifest.source_mode == InputSourceMode.REFERENCED and len(data) > MAX_INPUT_BYTES:
+                raise InputHashChangedError("referenced input exceeds 10 MiB limit")
         except (OSError, RuntimeError) as error:
             raise WorkspaceStorageError("registered input cannot be read") from error
         if hashlib.sha256(data).hexdigest() != manifest.content_sha256:

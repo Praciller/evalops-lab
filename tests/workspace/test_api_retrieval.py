@@ -371,3 +371,25 @@ def test_terminal_sse_reconnect_with_older_revision_returns_latest(
     assert "PRIVATE" not in text
     assert '"details"' not in text
     assert "retrieved_document_ids" not in text
+
+
+def test_oversized_referenced_file_fails_closed_and_hides_private_path(
+    ctx: tuple,
+    tmp_path: Path,
+) -> None:
+    from evalops.workspace.ingestion.models import MAX_INPUT_BYTES
+
+    client, store, ws, _ = ctx
+    source = tmp_path / "PRIVATE-oversized-reference.jsonl"
+    with source.open("wb") as handle:
+        handle.truncate(MAX_INPUT_BYTES + 1)
+    result = client.post(
+        f"/api/v1/workspaces/{ws}/inputs/reference",
+        headers=HEADERS,
+        json={"kind": "retrieval_predictions", "path": str(source)},
+    )
+    assert result.status_code == 422
+    assert result.json()["error"]["code"] == "INPUT_TOO_LARGE"
+    assert str(source) not in result.text
+    assert "PRIVATE" not in result.text
+    assert store.list_inputs(ws) == []

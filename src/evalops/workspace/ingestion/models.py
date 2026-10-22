@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MAX_INPUT_BYTES = 10 * 1024 * 1024
+
 
 class InputKind(StrEnum):
     RETRIEVAL_GROUND_TRUTH = "retrieval_ground_truth"

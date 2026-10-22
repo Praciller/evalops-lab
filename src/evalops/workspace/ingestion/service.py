@@ -10,6 +10,7 @@ from pathlib import Path
 from evalops.workspace.ingestion.csv_adapter import normalize_retrieval_csv_bytes
 from evalops.workspace.ingestion.jsonl import validate_retrieval_jsonl
 from evalops.workspace.ingestion.models import (
+    MAX_INPUT_BYTES,
     CsvMapping,
     InputKind,
     InputManifest,
@@ -122,7 +123,11 @@ def register_referenced_jsonl(
         resolved = source.resolve(strict=True)
         if not resolved.is_file():
             raise InputValidationError("NOT_A_FILE", "referenced input must be a regular file")
+        if resolved.stat().st_size > MAX_INPUT_BYTES:
+            raise InputValidationError("INPUT_TOO_LARGE", "input exceeds 10 MiB limit")
         data = resolved.read_bytes()
+        if len(data) > MAX_INPUT_BYTES:
+            raise InputValidationError("INPUT_TOO_LARGE", "input exceeds 10 MiB limit")
     except InputValidationError:
         raise
     except (OSError, RuntimeError) as error:

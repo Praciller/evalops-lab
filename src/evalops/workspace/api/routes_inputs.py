@@ -10,15 +10,18 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from pydantic import ValidationError
 
 from evalops.workspace.api.models import InputListResponse, InputSummary, ReferenceInputRequest
-from evalops.workspace.ingestion.models import CsvMapping, InputKind, InputValidationError
+from evalops.workspace.ingestion.models import (
+    MAX_INPUT_BYTES,
+    CsvMapping,
+    InputKind,
+    InputValidationError,
+)
 from evalops.workspace.ingestion.service import (
     register_imported_csv,
     register_imported_jsonl,
     register_referenced_jsonl,
 )
 from evalops.workspace.storage import WorkspaceStore
-
-MAX_INPUT_BYTES = 10 * 1024 * 1024
 
 
 def register_input_routes(

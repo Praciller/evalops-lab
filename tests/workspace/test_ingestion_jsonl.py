@@ -8,9 +8,15 @@ from pathlib import Path
 import pytest
 
 from evalops.datasets.io import load_retrieval_ground_truth, load_retrieval_predictions
-from evalops.workspace.ingestion.models import InputKind, InputSourceMode, InputValidationError
+from evalops.workspace.ingestion.models import (
+    MAX_INPUT_BYTES,
+    InputKind,
+    InputSourceMode,
+    InputValidationError,
+)
 from evalops.workspace.ingestion.service import register_imported_jsonl, register_referenced_jsonl
 from evalops.workspace.storage import (
+    InputHashChangedError,
     UnknownInputError,
     UnknownWorkspaceError,
     WorkspaceStorageError,
@@ -255,3 +261,29 @@ def test_manifest_is_immutable_and_failure_cleans_imported_bytes(
     imported = root / "workspaces" / workspace_id / "inputs" / "imported"
     assert len(list(imported.glob("*.jsonl"))) == 1
     assert not list(root.rglob("*.tmp"))
+
+
+def test_referenced_file_size_is_bounded_on_registration_and_runtime(
+    workspace: tuple[WorkspaceStore, str, Path], tmp_path: Path
+) -> None:
+    store, workspace_id, _ = workspace
+    source = tmp_path / "too-large-after-import.jsonl"
+    source.write_bytes(GT)
+    first = register_referenced_jsonl(
+        store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+    )
+    assert store.read_input_bytes(workspace_id, first.manifest.input_id) == GT
+    # Sparse extension avoids allocating a large fixture in the test process.
+    with source.open("r+b") as handle:
+        handle.truncate(MAX_INPUT_BYTES + 1)
+
+    with pytest.raises(InputHashChangedError, match="10 MiB"):
+        store.read_input_bytes(workspace_id, first.manifest.input_id)
+
+    with pytest.raises(InputValidationError) as caught:
+        register_referenced_jsonl(
+            store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+        )
+    assert caught.value.code == "INPUT_TOO_LARGE"
+    assert "too-large-after-import" not in str(caught.value)
+    assert len(store.list_inputs(workspace_id)) == 1
