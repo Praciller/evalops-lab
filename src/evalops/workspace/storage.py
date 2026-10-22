@@ -7,6 +7,8 @@ import json
 import os
 import re
 import tempfile
+import threading
+import time
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -16,6 +18,14 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from evalops.workspace.ingestion.models import InputKind, InputManifest, InputSourceMode
+from evalops.workspace.jobs.models import (
+    ALLOWED_TRANSITIONS,
+    TERMINAL_STATES,
+    InvalidJobTransitionError,
+    JobRecord,
+    JobState,
+    SafeJobError,
+)
 from evalops.workspace.models import (
     WORKSPACE_REGISTRY_SCHEMA_VERSION,
     WORKSPACE_SCHEMA_VERSION,
@@ -46,9 +56,23 @@ class UnknownInputError(WorkspaceStorageError):
 
 _INPUT_ID_RE = re.compile(r"^input-[0-9a-f]{32}$")
 _RUN_ID_RE = re.compile(r"^run-[0-9a-f]{32}$")
+_JOB_ID_RE = re.compile(r"^job-[0-9a-f]{32}$")
 
 if TYPE_CHECKING:
     from evalops.workspace.application.runs import RunSnapshot
+
+
+def _replace_with_windows_retry(source: Path, destination: Path) -> None:
+    """Retry brief Windows file-sharing locks, preserving atomic replace semantics."""
+
+    for attempt in range(8):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == 7:
+                raise
+            time.sleep(0.005 * (attempt + 1))
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
@@ -64,7 +88,7 @@ def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
+        _replace_with_windows_retry(temporary_path, path)
         temporary_path = None
     finally:
         if temporary_path is not None:
@@ -81,7 +105,7 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary_path, path)
+        _replace_with_windows_retry(temporary_path, path)
         temporary_path = None
     finally:
         if temporary_path is not None:
@@ -124,6 +148,7 @@ class WorkspaceStore:
         self.root = root
         self._registry_path = root / "registry.json"
         self._workspaces_path = root / "workspaces"
+        self._job_lock = threading.RLock()
 
     def initialize(self) -> None:
         self._workspaces_path.mkdir(parents=True, exist_ok=True)
@@ -316,6 +341,131 @@ class WorkspaceStore:
             raise WorkspaceStorageError("run directory is unsafe")
         return directory / "config.json"
 
+    def _jobs_directory(self, workspace_id: str) -> Path:
+        self.get_workspace(workspace_id)
+        workspace_root = (self._workspaces_path / workspace_id).resolve()
+        if not workspace_root.is_relative_to(self._workspaces_path.resolve()):
+            raise WorkspaceStorageError("workspace directory is unsafe")
+        directory = workspace_root / "jobs"
+        if not directory.resolve().is_relative_to(workspace_root):
+            raise WorkspaceStorageError("workspace jobs directory is unsafe")
+        return directory
+
+    def _job_path(self, workspace_id: str, job_id: str) -> Path:
+        if not _JOB_ID_RE.fullmatch(job_id):
+            raise WorkspaceStorageError("invalid job identifier")
+        directory = self._jobs_directory(workspace_id)
+        child = directory / job_id
+        if not child.resolve().is_relative_to(directory.resolve()):
+            raise WorkspaceStorageError("job directory is unsafe")
+        return child / "job.json"
+
+    def save_job_record(self, job: JobRecord) -> None:
+        """Persist only a brand-new QUEUED job belonging to an existing run."""
+        with self._job_lock:
+            snapshot = self.get_run_snapshot(job.workspace_id, job.run_id)
+            if snapshot.workspace_id != job.workspace_id:
+                raise WorkspaceStorageError("job workspace does not match its run")
+            if job.state != JobState.QUEUED or job.revision != 0 or job.cancel_requested:
+                raise WorkspaceStorageError("new jobs must begin in QUEUED state")
+            path = self._job_path(job.workspace_id, job.job_id)
+            if path.exists() or path.is_symlink():
+                raise WorkspaceStorageError("job already exists")
+            _atomic_create_json(path, job.model_dump(mode="json"))
+
+    def get_job_record(self, workspace_id: str, job_id: str) -> JobRecord:
+        self.get_workspace(workspace_id)
+        path = self._job_path(workspace_id, job_id)
+        if not path.is_file() or path.is_symlink():
+            raise WorkspaceStorageError("job is unavailable")
+        payload = _read_json(path)
+        _require_schema(payload, "workspace-job-v1")
+        try:
+            record = JobRecord.model_validate(payload)
+        except ValidationError as error:
+            raise WorkspaceStorageError("job record is invalid") from error
+        if record.job_id != job_id or record.workspace_id != workspace_id:
+            raise WorkspaceStorageError("job identity mismatch")
+        self.get_run_snapshot(workspace_id, record.run_id)
+        return record
+
+    def list_job_records(self, workspace_id: str) -> list[JobRecord]:
+        directory = self._jobs_directory(workspace_id)
+        if not directory.exists():
+            return []
+        if not directory.is_dir():
+            raise WorkspaceStorageError("job storage is invalid")
+        records = []
+        for path in sorted(directory.iterdir()):
+            if not path.is_dir() or path.is_symlink():
+                raise WorkspaceStorageError("unexpected job storage entry")
+            records.append(self.get_job_record(workspace_id, path.name))
+        return sorted(records, key=lambda record: (record.created_at, record.job_id))
+
+    def find_job_record(self, job_id: str) -> JobRecord:
+        if not _JOB_ID_RE.fullmatch(job_id):
+            raise WorkspaceStorageError("invalid job identifier")
+        matching = [
+            record
+            for workspace in self.list_workspaces()
+            for record in self.list_job_records(workspace.workspace_id)
+            if record.job_id == job_id
+        ]
+        if len(matching) != 1:
+            raise WorkspaceStorageError("job is unavailable or ambiguous")
+        return matching[0]
+
+    def update_job_record(
+        self,
+        workspace_id: str,
+        job_id: str,
+        *,
+        expected_revision: int,
+        next_state: JobState | None = None,
+        cancel_requested: bool | None = None,
+        safe_error: SafeJobError | None = None,
+    ) -> JobRecord:
+        """Atomically validate and advance exactly one persisted revision."""
+        with self._job_lock:
+            current = self.get_job_record(workspace_id, job_id)
+            if current.revision != expected_revision:
+                raise InvalidJobTransitionError("stale job revision")
+            if current.state in TERMINAL_STATES:
+                raise InvalidJobTransitionError("terminal job cannot be modified")
+            target = current.state if next_state is None else next_state
+            if next_state is not None and target not in ALLOWED_TRANSITIONS[current.state]:
+                raise InvalidJobTransitionError("unsupported job state transition")
+            cancel = current.cancel_requested if cancel_requested is None else cancel_requested
+            if current.cancel_requested and not cancel:
+                raise InvalidJobTransitionError("cancellation cannot be withdrawn")
+            if current.cancel_requested and target not in {
+                current.state,
+                JobState.CANCELLED,
+                JobState.FAILED,
+                JobState.INTERRUPTED,
+            }:
+                raise InvalidJobTransitionError("cancelled job cannot advance")
+            if safe_error is not None and target not in {JobState.FAILED, JobState.INTERRUPTED}:
+                raise InvalidJobTransitionError("safe error requires failed or interrupted state")
+            if target == JobState.FAILED and safe_error is None:
+                raise InvalidJobTransitionError("failed job requires a safe error")
+            if target == current.state and cancel == current.cancel_requested:
+                raise InvalidJobTransitionError("job update is a no-op")
+            updated = JobRecord.model_validate(
+                {
+                    **current.model_dump(mode="python"),
+                    "state": target,
+                    "revision": current.revision + 1,
+                    "cancel_requested": cancel,
+                    "safe_error": safe_error,
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+            _atomic_write_json(
+                self._job_path(workspace_id, job_id), updated.model_dump(mode="json")
+            )
+            return updated
+
     def _inputs_directory(self, workspace_id: str) -> Path:
         workspace_root = (self._workspaces_path / workspace_id).resolve()
         if not workspace_root.is_relative_to(self._workspaces_path.resolve()):
@@ -385,10 +535,18 @@ def _normalize_display_name(display_name: str) -> str:
 
 
 def _read_json(path: Path) -> dict[str, object]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise WorkspaceStorageError("workspace metadata is unreadable") from error
+    # Another Store instance/process can replace job.json between open() and
+    # Windows sharing checks. Retry only transient file-sharing PermissionError.
+    for attempt in range(8):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            break
+        except PermissionError as error:
+            if os.name != "nt" or attempt == 7:
+                raise WorkspaceStorageError("workspace metadata is unreadable") from error
+            time.sleep(0.005 * (attempt + 1))
+        except (OSError, json.JSONDecodeError) as error:
+            raise WorkspaceStorageError("workspace metadata is unreadable") from error
     if not isinstance(payload, dict):
         raise WorkspaceStorageError("workspace metadata must be a JSON object")
     return payload
