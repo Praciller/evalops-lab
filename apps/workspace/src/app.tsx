@@ -50,11 +50,22 @@ function reducer(state: AppState, action: AppAction): AppState {
       };
     case "WORKSPACES_LOADING":
       return { ...state, workspaceState: { status: "loading" } };
-    case "WORKSPACES_LOADED":
+    case "WORKSPACES_LOADED": {
+      // A create can complete before an older list response arrives. Preserve
+      // locally created entries that the older server snapshot cannot include.
+      const byId = new Map(action.workspaces.map((ws) => [ws.workspace_id, ws]));
+      if (state.workspaceState.status === "loaded") {
+        for (const workspace of state.workspaceState.workspaces) {
+          if (!byId.has(workspace.workspace_id)) {
+            byId.set(workspace.workspace_id, workspace);
+          }
+        }
+      }
       return {
         ...state,
-        workspaceState: { status: "loaded", workspaces: action.workspaces },
+        workspaceState: { status: "loaded", workspaces: [...byId.values()] },
       };
+    }
     case "WORKSPACES_ERROR":
       return {
         ...state,
