@@ -97,3 +97,22 @@ def test_no_relevant_documents_are_classified_as_an_abstention_case() -> None:
     result = evaluate_retrieval({"q1": []}, {"q1": ["noise"]}, k=1)
 
     assert result.per_query["q1"].failure_category == "SHOULD_ABSTAIN"
+
+
+def test_retrieval_miss_is_classified_at_same_cutoff_as_hit_rate() -> None:
+    result = evaluate_retrieval({"q1": ["relevant"]}, {"q1": ["noise", "relevant"]}, k=1)
+
+    assert result.per_query["q1"].metrics["hit_rate_at_1"] == 0.0
+    assert result.per_query["q1"].failure_category == "RETRIEVAL_MISS"
+
+
+def test_ndcg_does_not_pull_a_hit_from_beyond_top_k_after_duplicates() -> None:
+    assert ndcg_at_k(["relevant"], ["noise", "noise", "relevant"], k=2) == 0.0
+
+
+def test_ndcg_keeps_duplicate_ranks_in_place_without_repeat_gain() -> None:
+    observed = ndcg_at_k(["d1", "d2"], ["d1", "d1", "d2"], k=3)
+    ideal = 1 + 1 / math.log2(3)
+    expected = (1 + 1 / math.log2(4)) / ideal
+
+    assert observed == pytest.approx(expected)
