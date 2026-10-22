@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MetricDirection(StrEnum):
@@ -25,6 +26,8 @@ class RegressionStatus(StrEnum):
 
 class MetricRule(BaseModel):
     """Policy for an individual metric."""
+
+    model_config = ConfigDict(allow_inf_nan=False)
 
     metric_name: str = Field(min_length=1)
     direction: MetricDirection
@@ -59,6 +62,13 @@ def _compare_one(
 ) -> MetricComparison:
     current = current_metrics.get(rule.metric_name)
     baseline = baseline_metrics.get(rule.metric_name)
+    for label, value in (("current", current), ("baseline", baseline)):
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"{label} metric {rule.metric_name!r} must be a finite number")
     if current is None:
         return MetricComparison(
             metric_name=rule.metric_name,
@@ -127,8 +137,10 @@ def compare_metrics(
     baseline_metrics: Mapping[str, float],
     rules: Sequence[MetricRule],
 ) -> RegressionReport:
-    """Compare configured metrics and fail closed on missing evidence."""
+    """Compare configured metrics and fail closed on invalid or missing evidence."""
 
+    if not rules:
+        raise ValueError("comparison policy must contain at least one metric rule")
     comparisons = [_compare_one(current_metrics, baseline_metrics, rule) for rule in rules]
     return RegressionReport(
         passed=all(comparison.status == RegressionStatus.PASS for comparison in comparisons),
