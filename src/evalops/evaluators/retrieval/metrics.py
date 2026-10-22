@@ -22,10 +22,6 @@ def _validate_k(k: int) -> None:
         raise ValueError("k must be a positive integer")
 
 
-def _unique_in_order(values: Sequence[str]) -> list[str]:
-    return list(dict.fromkeys(values))
-
-
 def _relevance_map(relevant: RelevanceInput) -> dict[str, float]:
     if isinstance(relevant, Mapping):
         return {document_id: float(value) for document_id, value in relevant.items() if value > 0}
@@ -105,12 +101,15 @@ def ndcg_at_k(
     relevant = set(relevance)
     if not relevant:
         return 0.0
-    unique_retrieved = _unique_in_order(retrieved_document_ids)
-    dcg = sum(
-        (2 ** relevance[document_id] - 1) / math.log2(rank + 2)
-        for rank, document_id in enumerate(unique_retrieved[:k])
-        if document_id in relevant
-    )
+    seen: set[str] = set()
+    dcg = 0.0
+    for rank, document_id in enumerate(retrieved_document_ids[:k]):
+        # Duplicates earn no gain, but still occupy their original rank.
+        if document_id in seen:
+            continue
+        seen.add(document_id)
+        if document_id in relevant:
+            dcg += (2 ** relevance[document_id] - 1) / math.log2(rank + 2)
     ideal_relevance = sorted(relevance.values(), reverse=True)[:k]
     idcg = sum(
         (2**relevance_value - 1) / math.log2(rank + 2)
@@ -136,7 +135,10 @@ class RetrievalEvaluationResult(BaseModel):
 
 
 def _classify_retrieval(
-    relevant_document_ids: RelevanceInput, retrieved_document_ids: Sequence[str]
+    relevant_document_ids: RelevanceInput,
+    retrieved_document_ids: Sequence[str],
+    *,
+    k: int,
 ) -> FailureClassification:
     if not relevant_document_ids:
         return FailureClassification(
@@ -144,9 +146,7 @@ def _classify_retrieval(
             failure_class=FailureClass.SYSTEM,
             message="no relevant document is available; answer generation should abstain",
         )
-    if hit_rate_at_k(
-        relevant_document_ids, retrieved_document_ids, len(retrieved_document_ids) or 1
-    ):
+    if hit_rate_at_k(relevant_document_ids, retrieved_document_ids, k):
         return FailureClassification(category=FailureCategory.PASS, message="retrieval hit")
     return FailureClassification(
         category=FailureCategory.RETRIEVAL_MISS,
@@ -175,7 +175,7 @@ def evaluate_retrieval(
             "mrr": mean_reciprocal_rank(relevant, retrieved),
             f"ndcg_at_{k}": ndcg_at_k(relevant, retrieved, k),
         }
-        classification = _classify_retrieval(relevant, retrieved)
+        classification = _classify_retrieval(relevant, retrieved, k=k)
         per_query[query_id] = PerQueryRetrievalResult(
             metrics=query_metrics,
             failure_category=classification.category,
