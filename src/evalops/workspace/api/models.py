@@ -110,12 +110,18 @@ class RunSummary(StrictModel):
     job_id: str | None = None
     ground_truth_input_id: str
     predictions_input_id: str
+    ground_truth_sha256: str
+    predictions_sha256: str
+    evaluator_versions: dict[str, str]
     top_k: int
     system_name: str
     dataset_name: str
     dataset_version: str
     created_at: datetime
     metrics: dict[str, float] | None = None
+    failure_counts: dict[str, int] | None = None
+    result_sha256: str | None = None
+    evalops_version: str | None = None
 
     @classmethod
     def from_snapshot(
@@ -127,6 +133,9 @@ class RunSummary(StrictModel):
             run_name=snapshot.run_name,
             ground_truth_input_id=snapshot.ground_truth_input_id,
             predictions_input_id=snapshot.predictions_input_id,
+            ground_truth_sha256=snapshot.ground_truth_content_sha256,
+            predictions_sha256=snapshot.predictions_content_sha256,
+            evaluator_versions=snapshot.config.evaluator_versions,
             top_k=snapshot.config.top_k,
             system_name=snapshot.config.system_name,
             dataset_name=snapshot.config.dataset_name,

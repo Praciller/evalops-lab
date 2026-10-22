@@ -82,5 +82,14 @@ def register_run_routes(
         )
         if not has_complete:
             return RunSummary.from_snapshot(snapshot)
-        result, _ = store.get_run_artifacts(workspace_id, run_id)
-        return RunSummary.from_snapshot(snapshot, metrics=result.metrics)
+        result, provenance = store.get_run_artifacts(workspace_id, run_id)
+        failures: dict[str, int] = {}
+        for item in result.failures:
+            failures[item.category.value] = failures.get(item.category.value, 0) + 1
+        return RunSummary.from_snapshot(snapshot, metrics=result.metrics).model_copy(
+            update={
+                "failure_counts": failures,
+                "result_sha256": provenance.result_sha256,
+                "evalops_version": provenance.evalops_version,
+            }
+        )

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import { BrowserRouter, Link } from "react-router-dom";
+import { WorkspaceRoutes } from "./routes";
 import {
   WorkspaceApiError,
   bootstrapSession,
@@ -118,7 +120,7 @@ function extractAndClearNonce(): string | null {
 
 // ─── App component ────────────────────────────────────────────────────────────
 
-export default function App() {
+function WorkspaceApp() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const bootstrappedRef = useRef(false);
@@ -221,7 +223,13 @@ export default function App() {
       )}
 
       {state.auth.status === "authenticated" && (
-        <>
+        <WorkspaceRoutes
+          workspaces={
+            state.workspaceState.status === "loaded"
+              ? state.workspaceState.workspaces : []
+          }
+          overview={
+            <>
           <section aria-labelledby="workspace-section-heading">
             <h2 id="workspace-section-heading">Workspaces</h2>
 
@@ -245,7 +253,9 @@ export default function App() {
                   </li>
                 ) : (
                   state.workspaceState.workspaces.map((ws) => (
-                    <li key={ws.workspace_id}>{ws.display_name}</li>
+                    <li key={ws.workspace_id}>
+                      <Link to={`/workspaces/${ws.workspace_id}/inputs`}>{ws.display_name}</Link>
+                    </li>
                   ))
                 )}
               </ul>
@@ -285,8 +295,14 @@ export default function App() {
               </button>
             </form>
           </section>
-        </>
+            </>
+          }
+        />
       )}
     </main>
   );
+}
+
+export default function App() {
+  return <BrowserRouter><WorkspaceApp /></BrowserRouter>;
 }

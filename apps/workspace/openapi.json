@@ -415,8 +415,44 @@
             "title": "Dataset Version",
             "type": "string"
           },
+          "evalops_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evalops Version"
+          },
+          "evaluator_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Evaluator Versions",
+            "type": "object"
+          },
+          "failure_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Counts"
+          },
           "ground_truth_input_id": {
             "title": "Ground Truth Input Id",
+            "type": "string"
+          },
+          "ground_truth_sha256": {
+            "title": "Ground Truth Sha256",
             "type": "string"
           },
           "job_id": {
@@ -448,6 +484,21 @@
             "title": "Predictions Input Id",
             "type": "string"
           },
+          "predictions_sha256": {
+            "title": "Predictions Sha256",
+            "type": "string"
+          },
+          "result_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Sha256"
+          },
           "run_id": {
             "title": "Run Id",
             "type": "string"
@@ -475,6 +526,9 @@
           "run_name",
           "ground_truth_input_id",
           "predictions_input_id",
+          "ground_truth_sha256",
+          "predictions_sha256",
+          "evaluator_versions",
           "top_k",
           "system_name",
           "dataset_name",

@@ -162,6 +162,12 @@ def test_validate_enqueue_list_get_and_sse_terminal_revision(ctx: tuple) -> None
     assert listed.status_code == fetched.status_code == 200
     assert len(listed.json()["runs"]) == 1
     assert "hit_rate_at_2" in fetched.json()["metrics"]
+    assert fetched.json()["ground_truth_sha256"] == truth["content_sha256"]
+    assert fetched.json()["predictions_sha256"] == pred["content_sha256"]
+    assert fetched.json()["evaluator_versions"] == {"retrieval": "deterministic-v1"}
+    assert len(fetched.json()["result_sha256"]) == 64
+    assert fetched.json()["evalops_version"]
+    assert isinstance(fetched.json()["failure_counts"], dict)
     assert "details" not in fetched.text
     with client.stream("GET", f"/api/v1/jobs/{job['job_id']}/events", headers=HEADERS) as events:
         assert events.status_code == 200
