@@ -221,6 +221,31 @@ def test_session_mutation_origin_and_id_rejection(ctx: tuple) -> None:
     )
 
 
+@pytest.mark.parametrize("endpoint", ["upload", "csv"])
+def test_multipart_request_is_authorized_before_parsing(
+    ctx: tuple, endpoint: str
+) -> None:
+    client, _, ws, _ = ctx
+    path = f"/api/v1/workspaces/{ws}/inputs/{endpoint}"
+    # This payload cannot be parsed as the advertised multipart boundary.
+    malformed = b"--wrong-boundary\\r\\ninvalid multipart data"
+    headers = {**HEADERS, "Content-Type": "multipart/form-data; boundary=expected"}
+
+    without_session = TestClient(client.app).post(
+        path, headers=headers, content=malformed
+    )
+    assert without_session.status_code == 401, without_session.text
+    assert without_session.json()["error"]["code"] == "unauthenticated"
+
+    without_origin = client.post(
+        path,
+        headers={**headers, "Origin": "https://evil.example"},
+        content=malformed,
+    )
+    assert without_origin.status_code == 403, without_origin.text
+    assert without_origin.json()["error"]["code"] == "invalid_origin"
+
+
 def test_bad_inputs_fail_with_safe_error_and_no_paths(ctx: tuple) -> None:
     client, _, ws, _ = ctx
     bad = client.post(
