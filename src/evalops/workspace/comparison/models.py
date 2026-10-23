@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import AwareDatetime
 from enum import StrEnum
 from typing import Literal
 
 from evalops.regression.comparison import RegressionReport
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class ComparisonCompatibilityStatus(StrEnum):
@@ -43,6 +42,7 @@ class RetrievalPopulationEvidence(BaseModel):
     prediction_query_ids_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     ground_truth_query_count: int = Field(gt=0)
     prediction_query_count: int = Field(ge=0)
+
 
 class ComparisonMode(StrEnum):
     CANONICAL = "CANONICAL"
