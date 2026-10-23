@@ -236,3 +236,68 @@ def test_comparison_result_mutation_and_symlink_fail_closed(
         pytest.skip("symlink privileges unavailable")
     with pytest.raises(UnknownComparisonError):
         store.get_comparison_record(ws, record.comparison_id)
+
+
+def test_private_failure_artifact_is_immutable_and_checksum_bound(
+    prepared: tuple[WorkspaceStore, str, RetrievalRunService, ComparisonService, Path],
+) -> None:
+    from evalops.workspace.comparison.models import FailureTransition
+
+    store, ws, runner, service, root = prepared
+    baseline = _run(store, ws, runner, predictions=GOOD)
+    candidate = _run(store, ws, runner, predictions=BAD)
+    service.set_baseline(ws, baseline)
+    record = service.create_comparison(ws, candidate, mode=ComparisonMode.CANONICAL)
+
+    artifact = store.get_comparison_failures(ws, record.comparison_id)
+    assert artifact.schema_version == "workspace-comparison-failures-v1"
+    assert artifact.comparison_id == record.comparison_id
+    assert [row.query_id for row in artifact.transitions] == ["q1"]
+    assert artifact.transitions[0].transition == FailureTransition.REGRESSED
+    assert WorkspaceStore(root).get_comparison_failures(ws, record.comparison_id) == artifact
+
+    folder = root / "workspaces" / ws / "comparisons" / record.comparison_id
+    config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+    assert len(config["failures_sha256"]) == 64
+    path = folder / "failures.json"
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(WorkspaceStorageError, match="checksum"):
+        store.get_comparison_failures(ws, record.comparison_id)
+
+
+def test_exploratory_changed_query_ids_never_invent_transitions(
+    prepared: tuple[WorkspaceStore, str, RetrievalRunService, ComparisonService, Path],
+) -> None:
+    store, ws, runner, service, _ = prepared
+    baseline = _run(store, ws, runner, predictions=GOOD)
+    other_query = b'{"query_id":"q2","relevant_document_ids":["d2"]}\n'
+    candidate = _run(store, ws, runner, ground=other_query, predictions=BAD)
+    service.set_baseline(ws, baseline)
+    record = service.create_comparison(ws, candidate, mode=ComparisonMode.EXPLORATORY_ONLY)
+    assert record.compatibility.status == ComparisonCompatibilityStatus.NON_COMPARABLE
+    with pytest.raises(WorkspaceStorageError, match="unavailable"):
+        store.get_comparison_failures(ws, record.comparison_id)
+
+
+def test_failure_sidecar_write_error_rolls_back_partial_comparison(
+    prepared: tuple[WorkspaceStore, str, RetrievalRunService, ComparisonService, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import evalops.workspace.storage as module
+
+    store, ws, runner, service, root = prepared
+    baseline = _run(store, ws, runner, predictions=GOOD)
+    candidate = _run(store, ws, runner, predictions=BAD)
+    service.set_baseline(ws, baseline)
+    original = module._atomic_create_bytes
+
+    def interrupt(path: Path, data: bytes) -> None:
+        if path.name == "failures.json":
+            raise OSError("simulated local persistence fault")
+        original(path, data)
+
+    monkeypatch.setattr(module, "_atomic_create_bytes", interrupt)
+    with pytest.raises(OSError):
+        service.create_comparison(ws, candidate, mode=ComparisonMode.CANONICAL)
+    assert store.list_comparison_records(ws) == []
+    assert not list((root / "workspaces" / ws).rglob("comparison-*/result.json"))
