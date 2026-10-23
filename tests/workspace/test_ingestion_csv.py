@@ -113,6 +113,36 @@ def test_delimiter_must_be_one_character() -> None:
         CsvMapping(query_id_column="qid", document_ids_column="docs", document_ids_delimiter="||")
 
 
+
+def test_csv_expansion_beyond_runtime_cap_is_rejected_before_registration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "root"
+    store = WorkspaceStore(root)
+    store.initialize()
+    workspace_id = store.create_workspace("CSV boundary").workspace_id
+
+    # Raw CSV fits, but canonical JSONL is larger due to field names/JSON encoding.
+    import evalops.workspace.ingestion.service as ingestion_service
+
+    monkeypatch.setattr(ingestion_service, "MAX_INPUT_BYTES", len(GT_CSV))
+    canonical, _ = normalize_retrieval_csv_bytes(GT_CSV, kind=GT_KIND, mapping=MAPPING)
+    assert len(GT_CSV) <= ingestion_service.MAX_INPUT_BYTES < len(canonical)
+
+    with pytest.raises(InputValidationError) as caught:
+        register_imported_csv(
+            store,
+            workspace_id,
+            kind=GT_KIND,
+            data=GT_CSV,
+            source_filename="expanded.csv",
+            mapping=MAPPING,
+        )
+    assert caught.value.code == "INPUT_TOO_LARGE"
+    assert store.list_inputs(workspace_id) == []
+    assert list(root.rglob("*.jsonl")) == []
+
+
 def test_invalid_csv_never_leaves_canonical_files(tmp_path: Path) -> None:
     root = tmp_path / "root"
     store = WorkspaceStore(root)
