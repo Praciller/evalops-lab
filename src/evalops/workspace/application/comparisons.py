@@ -20,7 +20,6 @@ from evalops.workspace.comparison.policy import (
     WORKSPACE_RETRIEVAL_POLICY_VERSION,
     build_workspace_retrieval_rules,
 )
-
 from evalops.workspace.models import BaselinePointer, WorkspaceState
 from evalops.workspace.storage import WorkspaceStorageError, WorkspaceStore
 
