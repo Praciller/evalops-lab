@@ -34,8 +34,10 @@ from evalops.workspace.jobs.models import (
 from evalops.workspace.models import (
     WORKSPACE_REGISTRY_SCHEMA_VERSION,
     WORKSPACE_SCHEMA_VERSION,
+    WORKSPACE_STATE_SCHEMA_VERSION,
     WorkspaceRecord,
     WorkspaceRegistry,
+    WorkspaceState,
 )
 
 
@@ -225,6 +227,36 @@ class WorkspaceStore:
         )
         _atomic_write_json(self._workspace_path(workspace_id), renamed.model_dump(mode="json"))
         return renamed
+
+    def get_workspace_state(self, workspace_id: str) -> WorkspaceState:
+        """Read the private baseline pointer, or default to no baseline."""
+
+        self.get_workspace(workspace_id)
+        path = self._workspace_state_path(workspace_id)
+        if not path.exists() and not path.is_symlink():
+            return WorkspaceState()
+        if path.is_symlink() or not path.is_file():
+            raise WorkspaceStorageError("workspace state path is unsafe")
+        payload = _read_json(path)
+        _require_schema(payload, WORKSPACE_STATE_SCHEMA_VERSION)
+        try:
+            return WorkspaceState.model_validate(payload)
+        except ValidationError as error:
+            raise WorkspaceStorageError("workspace state is invalid") from error
+
+    def save_workspace_state(self, workspace_id: str, state: WorkspaceState) -> None:
+        """Atomically replace only mutable workspace state, never run evidence."""
+
+        self.get_workspace(workspace_id)
+        if not isinstance(state, WorkspaceState):
+            raise WorkspaceStorageError("workspace state contract is invalid")
+        path = self._workspace_state_path(workspace_id)
+        if path.is_symlink():
+            raise WorkspaceStorageError("workspace state path is unsafe")
+        _atomic_write_json(path, state.model_dump(mode="json"))
+
+    def _workspace_state_path(self, workspace_id: str) -> Path:
+        return self._workspace_path(workspace_id).with_name("workspace-state.json")
 
     def list_inputs(self, workspace_id: str) -> list[InputManifest]:
         self.get_workspace(workspace_id)
