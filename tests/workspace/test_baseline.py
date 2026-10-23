@@ -46,7 +46,11 @@ def setup(tmp_path: Path) -> tuple[WorkspaceStore, str, RetrievalRunService, Pat
 
 
 def create_job(
-    service: RetrievalRunService, workspace_id: str, gt: str, pred: str, *,
+    service: RetrievalRunService,
+    workspace_id: str,
+    gt: str,
+    pred: str,
+    *,
     name: str = "baseline",
 ) -> str:
     return service.create_and_enqueue(
