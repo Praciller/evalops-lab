@@ -5,9 +5,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from evalops.regression.comparison import RegressionReport
-
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+from evalops.regression.comparison import RegressionReport
 
 
 class ComparisonCompatibilityStatus(StrEnum):
