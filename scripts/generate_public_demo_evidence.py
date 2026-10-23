@@ -50,7 +50,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def _normalize_public_numbers(value: Any) -> Any:
     if isinstance(value, float):
-        return round(value, 12)
+        return round(value, 9)
     if isinstance(value, dict):
         return {key: _normalize_public_numbers(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -113,9 +113,10 @@ def _miracl_result() -> Any:
             timestamp=FIXED_TIMESTAMP,
         ),
     )
-    # BM25 and metric aggregation can vary in low-order float bits across fresh
-    # Python processes and platforms. Normalize only the public demo's exposed
-    # numbers; evaluator outputs and ranking semantics remain unchanged.
+    # BM25 query terms accumulate in stable order. Round public fixture scores
+    # at 9 decimal places to prevent platform-level last-bit drift from
+    # invalidating byte-exact published demo verification. Evaluator results and
+    # ranking decisions remain unchanged.
     return result.model_copy(
         update={
             "metrics": _normalize_public_numbers(result.metrics),
