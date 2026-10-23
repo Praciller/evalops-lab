@@ -113,7 +113,6 @@ def test_delimiter_must_be_one_character() -> None:
         CsvMapping(query_id_column="qid", document_ids_column="docs", document_ids_delimiter="||")
 
 
-
 def test_csv_expansion_beyond_runtime_cap_is_rejected_before_registration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
