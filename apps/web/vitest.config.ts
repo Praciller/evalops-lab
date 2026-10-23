@@ -32,6 +32,7 @@ export default defineConfig({
           name: "storybook-light",
           setupFiles: ["./.storybook/vitest.setup.ts"],
           browser: {
+            api: { port: 13316, host: "127.0.0.1" },
             enabled: true,
             headless: true,
             provider: playwright({}),
@@ -51,6 +52,7 @@ export default defineConfig({
           name: "storybook-dark",
           setupFiles: ["./.storybook/vitest.setup.ts"],
           browser: {
+            api: { port: 13317, host: "127.0.0.1" },
             enabled: true,
             headless: true,
             provider: playwright({}),
