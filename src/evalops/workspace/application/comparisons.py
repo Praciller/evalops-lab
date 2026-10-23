@@ -10,7 +10,9 @@ from evalops.workspace.comparison.compatibility import (
     assess_local_retrieval_compatibility,
     load_verified_population,
 )
+from evalops.workspace.comparison.failures import build_failure_transitions
 from evalops.workspace.comparison.models import (
+    ComparisonFailureArtifact,
     ComparisonCompatibility,
     ComparisonCompatibilityStatus,
     ComparisonMode,
@@ -94,13 +96,15 @@ class ComparisonService:
 
         baseline_snapshot = self._store.get_run_snapshot(workspace_id, pointer.run_id)
         candidate_snapshot = self._store.get_run_snapshot(workspace_id, candidate_run_id)
+        baseline_population = load_verified_population(self._store, baseline_snapshot)
+        candidate_population = load_verified_population(self._store, candidate_snapshot)
         compatibility = assess_local_retrieval_compatibility(
             baseline_snapshot,
             baseline_result,
             candidate_snapshot,
             candidate_result,
-            baseline_population=load_verified_population(self._store, baseline_snapshot),
-            candidate_population=load_verified_population(self._store, candidate_snapshot),
+            baseline_population=baseline_population,
+            candidate_population=candidate_population,
         )
         if (
             requested_mode == ComparisonMode.CANONICAL
@@ -126,5 +130,19 @@ class ComparisonService:
             regression_report=report,
             created_at=datetime.now(UTC),
         )
-        self._store.save_comparison_record(workspace_id, record)
+        # Failure transitions only exist when both actual evaluator query sets
+        # match. Exploratory comparisons across disjoint populations keep their
+        # immutable delta report but have no fabricated per-query transitions.
+        failure_artifact = None
+        if (
+            baseline_population.ground_truth_query_ids_fingerprint
+            == candidate_population.ground_truth_query_ids_fingerprint
+        ):
+            failure_artifact = ComparisonFailureArtifact(
+                comparison_id=record.comparison_id,
+                transitions=build_failure_transitions(baseline_result, candidate_result),
+            )
+        self._store.save_comparison_record(
+            workspace_id, record, failure_artifact=failure_artifact
+        )
         return record
