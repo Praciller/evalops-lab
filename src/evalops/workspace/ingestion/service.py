@@ -37,6 +37,10 @@ def _persist_imported(
     source_sha256: str,
     source_filename: str,
 ) -> InputRegistrationResult:
+    # CSV conversion can expand an upload beyond the runtime input-read limit.
+    # Never register canonical content that execution would later refuse to read.
+    if len(canonical) > MAX_INPUT_BYTES:
+        raise InputValidationError("INPUT_TOO_LARGE", "canonical input exceeds 10 MiB limit")
     input_id = f"input-{uuid.uuid4().hex}"
     relative_path = store.save_imported_input(workspace_id, input_id, canonical)
     manifest = InputManifest(
@@ -70,6 +74,8 @@ def register_imported_jsonl(
 
     store.get_workspace(workspace_id)
     _require_jsonl(source_filename)
+    if len(data) > MAX_INPUT_BYTES:
+        raise InputValidationError("INPUT_TOO_LARGE", "input exceeds 10 MiB limit")
     summary = validate_retrieval_jsonl(data, kind)
     return _persist_imported(
         store,
@@ -96,6 +102,8 @@ def register_imported_csv(
     store.get_workspace(workspace_id)
     if Path(source_filename).suffix.lower() != ".csv":
         raise InputValidationError("UNSUPPORTED_FORMAT", "only .csv source input is supported")
+    if len(data) > MAX_INPUT_BYTES:
+        raise InputValidationError("INPUT_TOO_LARGE", "input exceeds 10 MiB limit")
     canonical, summary = normalize_retrieval_csv_bytes(data, kind=kind, mapping=mapping)
     return _persist_imported(
         store,
