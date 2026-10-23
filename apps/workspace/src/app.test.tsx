@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import App from "./app";
 
@@ -179,6 +179,37 @@ describe("App — create workspace form", () => {
       expect(screen.getByText("Thai Retrieval")).toBeInTheDocument();
     });
     expect(apiClient.createWorkspace).toHaveBeenCalledWith("Thai Retrieval");
+  });
+
+  it("preserves a newly created workspace if an earlier list request resolves later", async () => {
+    const workspace = {
+      schema_version: "workspace-v1",
+      workspace_id: "ws-concurrent",
+      display_name: "Thai Retrieval",
+      created_at: "2026-09-07T00:00:00Z",
+      updated_at: "2026-09-07T00:00:00Z",
+    };
+    let releaseList!: (result: { workspaces: typeof workspace[] }) => void;
+    const deferredList = new Promise<{ workspaces: typeof workspace[] }>((resolve) => {
+      releaseList = resolve;
+    });
+    vi.mocked(apiClient.listWorkspaces).mockReturnValueOnce(deferredList);
+    vi.mocked(apiClient.createWorkspace).mockResolvedValue(workspace);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/Loading workspaces/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/workspace name/i), {
+      target: { value: "Thai Retrieval" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /create workspace/i }));
+    await waitFor(() => expect(screen.getByText("Thai Retrieval")).toBeInTheDocument());
+
+    await act(async () => {
+      releaseList({ workspaces: [] });
+      await deferredList;
+    });
+    expect(screen.getByText("Thai Retrieval")).toBeInTheDocument();
+    expect(screen.queryByText(/No workspaces yet/i)).not.toBeInTheDocument();
   });
 
   it("shows API error messages without exposing raw response bodies", async () => {

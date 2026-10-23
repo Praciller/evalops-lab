@@ -22,6 +22,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -50,6 +51,30 @@ def _run_worker(port: int, nonce: str, root: Path) -> None:
     session_manager = E2ETestSessionManager(bootstrap_nonce=nonce)
     store = WorkspaceStore(root)
 
+    # Test-only deterministic gate at the worker boundary. Never loaded in production.
+    from evalops.workspace.application.runs import (
+        CreateRetrievalRun,
+        RetrievalRunService,
+        create_retrieval_run,
+    )
+    from evalops.workspace.ingestion.models import InputKind
+    from evalops.workspace.jobs.models import JobRecord, JobState
+
+    gate_enabled = threading.Event()
+    gate_entered = threading.Event()
+    gate_release = threading.Event()
+    original_execute = RetrievalRunService.execute_job
+
+    def gated_execute(self: RetrievalRunService, workspace_id: str, job_id: str) -> None:
+        if gate_enabled.is_set():
+            gate_enabled.clear()
+            gate_entered.set()
+            if not gate_release.wait(timeout=20):
+                raise RuntimeError("test gate release timed out")
+        original_execute(self, workspace_id, job_id)
+
+    RetrievalRunService.execute_job = gated_execute
+
     # Point to the built Vite bundle in apps/workspace/dist
     static_dir = repo_root / "apps" / "workspace" / "dist"
 
@@ -71,6 +96,91 @@ def _run_worker(port: int, nonce: str, root: Path) -> None:
         loop = asyncio.get_running_loop()
         loop.call_later(0.1, lambda: os._exit(RESTART_EXIT_CODE))
         return {"status": "restarting", "pid": current_pid}
+
+    @app.post("/__test__/gate/enable")
+    async def enable_gate() -> dict[str, bool]:
+        gate_entered.clear()
+        gate_release.clear()
+        gate_enabled.set()
+        return {"enabled": True}
+
+    @app.get("/__test__/gate/status")
+    async def gate_status() -> dict[str, bool]:
+        return {"entered": gate_entered.is_set()}
+
+    @app.post("/__test__/gate/release")
+    async def release_gate() -> dict[str, bool]:
+        gate_release.set()
+        return {"released": True}
+
+    @app.post("/__test__/fixture/reference")
+    async def create_reference() -> dict[str, str]:
+        target = root / "test-synthetic" / "predictions.jsonl"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('{"query_id":"q1","retrieved_document_ids":["d1"]}\n', encoding="utf-8")
+        return {"path": str(target.resolve())}
+
+    @app.post("/__test__/fixture/mutate")
+    async def mutate_reference() -> dict[str, bool]:
+        target = root / "test-synthetic" / "predictions.jsonl"
+        if not target.is_file():
+            return {"mutated": False}
+        target.write_text(
+            '{"query_id":"q1","retrieved_document_ids":["CHANGED"]}\n', encoding="utf-8"
+        )
+        return {"mutated": True}
+
+    def latest_test_workspace_id() -> str:
+        # Test-only: derive identity from owned disk state, never HTTP parameters.
+        workspaces = store.list_workspaces()
+        if not workspaces:
+            raise RuntimeError("E2E fixture requires a registered workspace")
+        return max(workspaces, key=lambda item: item.created_at).workspace_id
+
+    @app.post("/__test__/jobs/seed-transient")
+    async def seed_transient() -> dict[str, str]:
+        workspace_id = latest_test_workspace_id()
+        inputs = store.list_inputs(workspace_id)
+        ground = next(item for item in inputs if item.kind == InputKind.RETRIEVAL_GROUND_TRUTH)
+        predictions = next(item for item in inputs if item.kind == InputKind.RETRIEVAL_PREDICTIONS)
+        snapshot = create_retrieval_run(
+            store,
+            workspace_id,
+            CreateRetrievalRun(
+                run_name="Synthetic interrupted run",
+                ground_truth_input_id=ground.input_id,
+                predictions_input_id=predictions.input_id,
+                top_k=2,
+                system_name="synthetic-e2e",
+                dataset_name="synthetic-fixture",
+                dataset_version="v1",
+            ),
+        )
+        job = JobRecord.queued(workspace_id, snapshot.run_id)
+        store.save_job_record(job)
+        store.update_job_record(
+            workspace_id,
+            job.job_id,
+            expected_revision=0,
+            next_state=JobState.VALIDATING,
+        )
+        return {"workspace_id": workspace_id, "job_id": job.job_id, "run_id": snapshot.run_id}
+
+    @app.get("/__test__/artifacts/status")
+    async def artifact_status() -> dict[str, str | bool]:
+        # Never accept path identifiers from unauthenticated fixture requests.
+        workspace_id = latest_test_workspace_id()
+        snapshots = store.list_run_snapshots(workspace_id)
+        if not snapshots:
+            raise RuntimeError("E2E fixture requires a run")
+        run_id = max(snapshots, key=lambda run: run.created_at).run_id
+        directory = store._run_config_path(workspace_id, run_id).parent
+        return {
+            "workspace_id": workspace_id,
+            "run_id": run_id,
+            "result": (directory / "result.json").exists(),
+            "provenance": (directory / "provenance.json").exists(),
+        }
 
     # Reorder routes so test endpoints match before the catch-all SPA route /{path:path}
     test_routes = [r for r in app.router.routes if getattr(r, "path", "").startswith("/__test__")]

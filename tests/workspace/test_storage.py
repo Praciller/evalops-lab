@@ -11,6 +11,7 @@ from evalops.workspace.storage import (
     DuplicateWorkspaceError,
     UnknownWorkspaceError,
     UnsupportedSchemaVersionError,
+    WorkspaceStorageError,
     WorkspaceStore,
 )
 
@@ -65,14 +66,14 @@ def test_store_rejects_duplicate_and_unknown_workspace_ids(tmp_path: Path) -> No
         json.dumps(
             {
                 "schema_version": WORKSPACE_REGISTRY_SCHEMA_VERSION,
-                "workspace_ids": ["ws-does-not-exist"],
+                "workspace_ids": ["ws-" + "0" * 32],
             }
         )
     )
     with pytest.raises(UnknownWorkspaceError):
         store.list_workspaces()
     with pytest.raises(UnknownWorkspaceError):
-        store.get_workspace("ws-does-not-exist")
+        store.get_workspace("ws-" + "0" * 32)
 
 
 def test_store_rejects_unknown_schema_versions(tmp_path: Path) -> None:
@@ -118,3 +119,57 @@ def test_workspace_json_has_version_and_stable_metadata(tmp_path: Path) -> None:
     assert payload["schema_version"] == WORKSPACE_SCHEMA_VERSION
     assert payload["workspace_id"] == record.workspace_id
     assert payload["created_at"] == record.created_at.isoformat().replace("+00:00", "Z")
+
+
+def test_rejects_tampered_workspace_registry_and_identity(tmp_path: Path) -> None:
+    root = tmp_path / "workspace-root"
+    store = WorkspaceStore(root)
+    store.initialize()
+    created = store.create_workspace("Original")
+    registry = root / "registry.json"
+
+    for unsafe_id in ("../outside", "/etc/passwd", "ws-", "ws-" + "f" * 31 + "/"):
+        registry.write_text(
+            json.dumps(
+                {
+                    "schema_version": WORKSPACE_REGISTRY_SCHEMA_VERSION,
+                    "workspace_ids": [unsafe_id],
+                }
+            )
+        )
+        with pytest.raises(WorkspaceStorageError, match="invalid identifiers"):
+            store.list_workspaces()
+
+    registry.write_text(
+        json.dumps(
+            {
+                "schema_version": WORKSPACE_REGISTRY_SCHEMA_VERSION,
+                "workspace_ids": [created.workspace_id],
+            }
+        )
+    )
+    metadata_path = root / "workspaces" / created.workspace_id / "workspace.json"
+    forged = json.loads(metadata_path.read_text())
+    forged["workspace_id"] = "ws-" + "e" * 32
+    metadata_path.write_text(json.dumps(forged))
+    with pytest.raises(WorkspaceStorageError, match="identity mismatch"):
+        store.get_workspace(created.workspace_id)
+    with pytest.raises(WorkspaceStorageError, match="identity mismatch"):
+        store.list_workspaces()
+
+
+def test_rejects_symlinked_workspace_metadata(tmp_path: Path) -> None:
+    root = tmp_path / "workspace-root"
+    store = WorkspaceStore(root)
+    store.initialize()
+    created = store.create_workspace("Protected")
+    target = tmp_path / "external-workspace.json"
+    original = root / "workspaces" / created.workspace_id / "workspace.json"
+    target.write_bytes(original.read_bytes())
+    original.unlink()
+    try:
+        original.symlink_to(target)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"local OS cannot create file symlink: {error}")
+    with pytest.raises(UnknownWorkspaceError):
+        store.get_workspace(created.workspace_id)

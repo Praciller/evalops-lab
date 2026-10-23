@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import { BrowserRouter, Link } from "react-router-dom";
+import { WorkspaceRoutes } from "./routes";
 import {
   WorkspaceApiError,
   bootstrapSession,
@@ -50,11 +52,22 @@ function reducer(state: AppState, action: AppAction): AppState {
       };
     case "WORKSPACES_LOADING":
       return { ...state, workspaceState: { status: "loading" } };
-    case "WORKSPACES_LOADED":
+    case "WORKSPACES_LOADED": {
+      // A create can complete before an older list response arrives. Preserve
+      // locally created entries that the older server snapshot cannot include.
+      const byId = new Map(action.workspaces.map((ws) => [ws.workspace_id, ws]));
+      if (state.workspaceState.status === "loaded") {
+        for (const workspace of state.workspaceState.workspaces) {
+          if (!byId.has(workspace.workspace_id)) {
+            byId.set(workspace.workspace_id, workspace);
+          }
+        }
+      }
       return {
         ...state,
-        workspaceState: { status: "loaded", workspaces: action.workspaces },
+        workspaceState: { status: "loaded", workspaces: [...byId.values()] },
       };
+    }
     case "WORKSPACES_ERROR":
       return {
         ...state,
@@ -107,7 +120,7 @@ function extractAndClearNonce(): string | null {
 
 // ─── App component ────────────────────────────────────────────────────────────
 
-export default function App() {
+function WorkspaceApp() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const bootstrappedRef = useRef(false);
@@ -210,7 +223,13 @@ export default function App() {
       )}
 
       {state.auth.status === "authenticated" && (
-        <>
+        <WorkspaceRoutes
+          workspaces={
+            state.workspaceState.status === "loaded"
+              ? state.workspaceState.workspaces : []
+          }
+          overview={
+            <>
           <section aria-labelledby="workspace-section-heading">
             <h2 id="workspace-section-heading">Workspaces</h2>
 
@@ -234,7 +253,9 @@ export default function App() {
                   </li>
                 ) : (
                   state.workspaceState.workspaces.map((ws) => (
-                    <li key={ws.workspace_id}>{ws.display_name}</li>
+                    <li key={ws.workspace_id}>
+                      <Link to={`/workspaces/${ws.workspace_id}/inputs`}>{ws.display_name}</Link>
+                    </li>
                   ))
                 )}
               </ul>
@@ -274,8 +295,14 @@ export default function App() {
               </button>
             </form>
           </section>
-        </>
+            </>
+          }
+        />
       )}
     </main>
   );
+}
+
+export default function App() {
+  return <BrowserRouter><WorkspaceApp /></BrowserRouter>;
 }
