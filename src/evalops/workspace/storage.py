@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from evalops.workspace.comparison.models import ComparisonRecord
 from evalops.workspace.ingestion.models import (
     MAX_INPUT_BYTES,
     InputKind,
@@ -69,6 +70,10 @@ class UnknownJobError(WorkspaceStorageError):
     """Job does not exist or is not owned by the selected Workspace."""
 
 
+class UnknownComparisonError(WorkspaceStorageError):
+    """Comparison does not belong to the selected workspace."""
+
+
 class InputHashChangedError(WorkspaceStorageError):
     """Referenced or imported content no longer matches its registered digest."""
 
@@ -77,6 +82,7 @@ _WORKSPACE_ID_RE = re.compile(r"^ws-[0-9a-f]{32}$")
 _INPUT_ID_RE = re.compile(r"^input-[0-9a-f]{32}$")
 _RUN_ID_RE = re.compile(r"^run-[0-9a-f]{32}$")
 _JOB_ID_RE = re.compile(r"^job-[0-9a-f]{32}$")
+_COMPARISON_ID_RE = re.compile(r"^comparison-[0-9a-f]{32}$")
 
 if TYPE_CHECKING:
     from evalops.models.runs import EvaluationResult
@@ -537,6 +543,110 @@ class WorkspaceStore:
                 if path.is_symlink():
                     raise WorkspaceStorageError("run evidence path is unsafe")
                 path.unlink(missing_ok=True)
+
+    def _comparisons_directory(self, workspace_id: str) -> Path:
+        self.get_workspace(workspace_id)
+        workspace_root = (self._workspaces_path / workspace_id).resolve()
+        if not workspace_root.is_relative_to(self._workspaces_path.resolve()):
+            raise WorkspaceStorageError("workspace directory is unsafe")
+        directory = workspace_root / "comparisons"
+        if directory.is_symlink() or not directory.resolve().is_relative_to(workspace_root):
+            raise WorkspaceStorageError("workspace comparisons directory is unsafe")
+        return directory
+
+    def _comparison_directory(self, workspace_id: str, comparison_id: str) -> Path:
+        if not _COMPARISON_ID_RE.fullmatch(comparison_id):
+            raise UnknownComparisonError("invalid comparison identifier")
+        base = self._comparisons_directory(workspace_id)
+        directory = base / comparison_id
+        if directory.is_symlink() or not directory.resolve().is_relative_to(base.resolve()):
+            raise WorkspaceStorageError("comparison directory is unsafe")
+        return directory
+
+    def save_comparison_record(self, workspace_id: str, record: ComparisonRecord) -> None:
+        """Create the private immutable result and checksum-bound identity manifest."""
+
+        with self._job_lock:
+            if not isinstance(record, ComparisonRecord) or record.workspace_id != workspace_id:
+                raise WorkspaceStorageError("comparison ownership is invalid")
+            directory = self._comparison_directory(workspace_id, record.comparison_id)
+            config_path, result_path = directory / "config.json", directory / "result.json"
+            if any(path.exists() or path.is_symlink() for path in (config_path, result_path)):
+                raise WorkspaceStorageError("immutable comparison already exists")
+            result_bytes = (
+                json.dumps(
+                    record.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True
+                )
+                + "\n"
+            ).encode("utf-8")
+            config = {
+                "schema_version": "workspace-comparison-config-v1",
+                "comparison_id": record.comparison_id,
+                "workspace_id": workspace_id,
+                "mode": record.mode.value,
+                "baseline_run_id": record.baseline_run_id,
+                "baseline_result_sha256": record.baseline_result_sha256,
+                "candidate_run_id": record.candidate_run_id,
+                "candidate_result_sha256": record.candidate_result_sha256,
+                "policy_version": record.policy_version,
+                "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
+            }
+            created_result = False
+            try:
+                _atomic_create_bytes(result_path, result_bytes)
+                created_result = True
+                _atomic_create_json(config_path, config)
+            except Exception:
+                if created_result:
+                    result_path.unlink(missing_ok=True)
+                raise
+
+    def get_comparison_record(self, workspace_id: str, comparison_id: str) -> ComparisonRecord:
+        """Reject partial, symlinked or hash-inconsistent comparison evidence."""
+
+        directory = self._comparison_directory(workspace_id, comparison_id)
+        config_path, result_path = directory / "config.json", directory / "result.json"
+        if any(path.is_symlink() or not path.is_file() for path in (config_path, result_path)):
+            raise UnknownComparisonError("comparison evidence is unavailable")
+        config = _read_json(config_path)
+        _require_schema(config, "workspace-comparison-config-v1")
+        try:
+            result_bytes = result_path.read_bytes()
+            if hashlib.sha256(result_bytes).hexdigest() != config.get("result_sha256"):
+                raise WorkspaceStorageError("comparison result checksum mismatch")
+            record = ComparisonRecord.model_validate_json(result_bytes)
+        except (OSError, ValidationError, ValueError) as error:
+            raise WorkspaceStorageError("comparison evidence is invalid") from error
+        expected = {
+            "comparison_id": record.comparison_id,
+            "workspace_id": record.workspace_id,
+            "mode": record.mode.value,
+            "baseline_run_id": record.baseline_run_id,
+            "baseline_result_sha256": record.baseline_result_sha256,
+            "candidate_run_id": record.candidate_run_id,
+            "candidate_result_sha256": record.candidate_result_sha256,
+            "policy_version": record.policy_version,
+        }
+        if (
+            record.workspace_id != workspace_id
+            or record.comparison_id != comparison_id
+            or any(config.get(key) != value for key, value in expected.items())
+        ):
+            raise WorkspaceStorageError("comparison identity or metadata is invalid")
+        return record
+
+    def list_comparison_records(self, workspace_id: str) -> list[ComparisonRecord]:
+        directory = self._comparisons_directory(workspace_id)
+        if not directory.exists():
+            return []
+        if not directory.is_dir():
+            raise WorkspaceStorageError("comparison directory is invalid")
+        records = []
+        for item in sorted(directory.iterdir()):
+            if item.is_symlink() or not item.is_dir():
+                raise WorkspaceStorageError("unexpected comparison storage entry")
+            records.append(self.get_comparison_record(workspace_id, item.name))
+        return sorted(records, key=lambda item: (item.created_at, item.comparison_id))
 
     def _jobs_directory(self, workspace_id: str) -> Path:
         self.get_workspace(workspace_id)
