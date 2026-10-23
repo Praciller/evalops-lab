@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import pytest
 
 from evalops.models.retrieval import CorpusDocument, RetrievalQuery
@@ -57,3 +61,32 @@ def test_empty_query_returns_no_results_and_top_k_is_validated() -> None:
 def test_duplicate_corpus_document_ids_are_rejected() -> None:
     with pytest.raises(ValueError, match="duplicate document ID"):
         BM25Retriever([_document("d1", "one"), _document("d1", "two")])
+
+
+def test_bm25_scores_are_byte_stable_across_hash_seeds() -> None:
+    """Reproduce query token ordering across fresh, independently seeded interpreters."""
+
+    code = """
+import json
+from evalops.models.retrieval import CorpusDocument, RetrievalQuery
+from evalops.retrieval.bm25 import BM25Retriever
+documents = [
+    CorpusDocument(document_id="d1", title="กรุงเทพมหานคร", text="ประเทศไทย เมืองหลวง ศูนย์กลาง"),
+    CorpusDocument(document_id="d2", title="ประเทศไทย", text="กรุงเทพมหานคร เมืองสำคัญ"),
+    CorpusDocument(document_id="d3", title="จังหวัด", text="ประเทศไทย จังหวัด ประชากร"),
+]
+query = RetrievalQuery(query_id="q1", text="กรุงเทพมหานคร ประเทศไทย เมืองหลวง ประชากร")
+results = BM25Retriever(documents).retrieve(query, top_k=3)
+print(json.dumps([(hit.document_id, hit.rank, repr(hit.score)) for hit in results]))
+"""
+    outputs = [
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        ).stdout
+        for seed in ("0", "1", "17", "123456")
+    ]
+    assert len(set(outputs)) == 1
