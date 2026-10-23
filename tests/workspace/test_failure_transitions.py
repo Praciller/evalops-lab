@@ -30,12 +30,8 @@ def _result(predictions: dict[str, list[str]]) -> EvaluationResult:
 
 
 def test_all_failure_transition_states_preserve_original_metrics() -> None:
-    baseline = _result(
-        {"a": ["doc-a"], "b": ["doc-b"], "c": ["bad"], "d": ["bad"], "e": ["bad"]}
-    )
-    candidate = _result(
-        {"a": ["doc-a"], "b": ["bad"], "c": ["doc-c"], "d": ["bad"], "e": ["bad"]}
-    )
+    baseline = _result({"a": ["doc-a"], "b": ["doc-b"], "c": ["bad"], "d": ["bad"], "e": ["bad"]})
+    candidate = _result({"a": ["doc-a"], "b": ["bad"], "c": ["doc-c"], "d": ["bad"], "e": ["bad"]})
     original = deepcopy(candidate.details)
     # Simulate a separate evaluator-owned failure classification for query e.
     # The transition builder must never infer the label from metric values.
