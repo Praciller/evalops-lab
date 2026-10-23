@@ -71,6 +71,7 @@ class InputHashChangedError(WorkspaceStorageError):
     """Referenced or imported content no longer matches its registered digest."""
 
 
+_WORKSPACE_ID_RE = re.compile(r"^ws-[0-9a-f]{32}$")
 _INPUT_ID_RE = re.compile(r"^input-[0-9a-f]{32}$")
 _RUN_ID_RE = re.compile(r"^run-[0-9a-f]{32}$")
 _JOB_ID_RE = re.compile(r"^job-[0-9a-f]{32}$")
@@ -667,21 +668,32 @@ class WorkspaceStore:
             raise WorkspaceStorageError("workspace registry is invalid") from error
         if len(registry.workspace_ids) != len(set(registry.workspace_ids)):
             raise DuplicateWorkspaceError("workspace registry contains duplicate IDs")
+        if any(not _WORKSPACE_ID_RE.fullmatch(item) for item in registry.workspace_ids):
+            raise WorkspaceStorageError("workspace registry contains invalid identifiers")
         return registry
 
     def _load_workspace(self, workspace_id: str) -> WorkspaceRecord:
         path = self._workspace_path(workspace_id)
-        if not path.is_file():
+        if path.is_symlink() or not path.is_file():
             raise UnknownWorkspaceError("registered workspace metadata is missing")
         payload = _read_json(path)
         _require_schema(payload, WORKSPACE_SCHEMA_VERSION)
         try:
-            return WorkspaceRecord.model_validate(payload)
+            record = WorkspaceRecord.model_validate(payload)
         except ValidationError as error:
             raise WorkspaceStorageError("workspace metadata is invalid") from error
+        if record.workspace_id != workspace_id:
+            raise WorkspaceStorageError("workspace metadata identity mismatch")
+        return record
 
     def _workspace_path(self, workspace_id: str) -> Path:
-        return self._workspaces_path / workspace_id / "workspace.json"
+        if not _WORKSPACE_ID_RE.fullmatch(workspace_id):
+            raise UnknownWorkspaceError("workspace identifier is invalid")
+        base = self._workspaces_path.resolve()
+        directory = (self._workspaces_path / workspace_id).resolve()
+        if not directory.is_relative_to(base):
+            raise WorkspaceStorageError("workspace directory is unsafe")
+        return directory / "workspace.json"
 
     @staticmethod
     def _new_workspace_id(existing: set[str]) -> str:
