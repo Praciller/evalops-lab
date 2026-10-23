@@ -84,7 +84,9 @@ class BM25Retriever:
 
         if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k <= 0:
             raise ValueError("top_k must be a positive integer")
-        query_tokens = set(tokenize_thai_aware(query.text))
+        # Floating-point summation is order-sensitive. A set's iteration order
+        # varies with PYTHONHASHSEED; sort unique tokens before score accumulation.
+        query_tokens = sorted(set(tokenize_thai_aware(query.text)))
         if not query_tokens or not self._documents:
             return []
 
