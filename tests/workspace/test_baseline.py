@@ -11,7 +11,7 @@ from evalops.workspace.application.comparisons import ComparisonService
 from evalops.workspace.application.runs import CreateRetrievalRun, RetrievalRunService
 from evalops.workspace.ingestion.models import InputKind
 from evalops.workspace.ingestion.service import register_imported_jsonl
-from evalops.workspace.jobs.models import JobState
+from evalops.workspace.jobs.models import JobState, SafeJobError
 from evalops.workspace.storage import WorkspaceStorageError, WorkspaceStore
 
 GT = b'{"query_id":"q1","relevant_document_ids":["doc1"]}\n'
@@ -121,6 +121,56 @@ def test_incomplete_run_or_foreign_run_cannot_be_pinned(
     with pytest.raises(WorkspaceStorageError):
         ComparisonService(store).set_baseline(foreign, unstarted)
     assert ComparisonService(store).get_baseline(foreign) is None
+
+
+@pytest.mark.parametrize("terminal", [JobState.FAILED, JobState.CANCELLED, JobState.INTERRUPTED])
+def test_terminal_without_complete_evidence_is_not_pinnable(
+    setup: tuple[WorkspaceStore, str, RetrievalRunService, Path, str, str],
+    terminal: JobState,
+) -> None:
+    store, ws, service, _, gt, pred = setup
+    run_id = create_job(service, ws, gt, pred)
+    job = next(item for item in store.list_job_records(ws) if item.run_id == run_id)
+    if terminal == JobState.INTERRUPTED:
+        job = store.update_job_record(
+            ws, job.job_id, expected_revision=job.revision, next_state=JobState.VALIDATING
+        )
+    store.update_job_record(
+        ws,
+        job.job_id,
+        expected_revision=job.revision,
+        next_state=terminal,
+        cancel_requested=terminal == JobState.CANCELLED,
+        safe_error=(
+            SafeJobError(code="TEST_STOP", message="test terminal state")
+            if terminal != JobState.CANCELLED
+            else None
+        ),
+    )
+    with pytest.raises(WorkspaceStorageError):
+        ComparisonService(store).set_baseline(ws, run_id)
+    assert ComparisonService(store).get_baseline(ws) is None
+
+
+def test_complete_status_without_artifacts_is_rejected(
+    setup: tuple[WorkspaceStore, str, RetrievalRunService, Path, str, str],
+) -> None:
+    store, ws, service, _, gt, pred = setup
+    run_id = create_job(service, ws, gt, pred)
+    job = next(item for item in store.list_job_records(ws) if item.run_id == run_id)
+    for phase in (
+        JobState.VALIDATING,
+        JobState.EVALUATING,
+        JobState.ANALYZING,
+        JobState.WRITING_ARTIFACT,
+        JobState.COMPLETE,
+    ):
+        job = store.update_job_record(
+            ws, job.job_id, expected_revision=job.revision, next_state=phase
+        )
+    with pytest.raises(WorkspaceStorageError, match="incomplete"):
+        ComparisonService(store).set_baseline(ws, run_id)
+    assert ComparisonService(store).get_baseline(ws) is None
 
 
 def test_tampered_completed_result_never_becomes_pinned_baseline(
