@@ -142,7 +142,5 @@ class ComparisonService:
                 comparison_id=record.comparison_id,
                 transitions=build_failure_transitions(baseline_result, candidate_result),
             )
-        self._store.save_comparison_record(
-            workspace_id, record, failure_artifact=failure_artifact
-        )
+        self._store.save_comparison_record(workspace_id, record, failure_artifact=failure_artifact)
         return record
