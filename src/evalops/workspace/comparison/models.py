@@ -68,6 +68,7 @@ class ComparisonRecord(BaseModel):
     regression_report: RegressionReport
     created_at: AwareDatetime
 
+
 class FailureTransition(StrEnum):
     UNCHANGED_PASS = "UNCHANGED_PASS"
     REGRESSED = "REGRESSED"
@@ -94,8 +95,6 @@ class ComparisonFailureArtifact(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["workspace-comparison-failures-v1"] = (
-        "workspace-comparison-failures-v1"
-    )
+    schema_version: Literal["workspace-comparison-failures-v1"] = "workspace-comparison-failures-v1"
     comparison_id: str = Field(pattern=r"^comparison-[0-9a-f]{32}$")
     transitions: list[QueryFailureTransition]
