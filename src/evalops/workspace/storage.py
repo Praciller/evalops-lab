@@ -576,7 +576,8 @@ class WorkspaceStore:
             result_bytes = (
                 json.dumps(
                     record.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True
-                ) + "\n"
+                )
+                + "\n"
             ).encode("utf-8")
             config = {
                 "schema_version": "workspace-comparison-config-v1",
@@ -600,9 +601,7 @@ class WorkspaceStore:
                     result_path.unlink(missing_ok=True)
                 raise
 
-    def get_comparison_record(
-        self, workspace_id: str, comparison_id: str
-    ) -> ComparisonRecord:
+    def get_comparison_record(self, workspace_id: str, comparison_id: str) -> ComparisonRecord:
         """Reject partial, symlinked or hash-inconsistent comparison evidence."""
 
         directory = self._comparison_directory(workspace_id, comparison_id)
