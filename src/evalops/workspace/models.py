@@ -27,6 +27,7 @@ class WorkspaceRegistry(BaseModel):
     schema_version: Literal["workspace-registry-v1"]
     workspace_ids: list[str]
 
+
 WORKSPACE_STATE_SCHEMA_VERSION: Final[Literal["workspace-state-v1"]] = "workspace-state-v1"
 
 
