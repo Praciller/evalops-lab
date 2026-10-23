@@ -87,7 +87,26 @@ def create_workspace_app(
         except WorkspaceSecurityError as error:
             response = _error_response(error.code, str(error), 400)
         else:
-            response = await call_next(request)
+            # FastAPI parses UploadFile multipart bodies before entering the route.
+            # Check authorization here, before any unauthenticated upload is spooled.
+            is_file_upload = (
+                request.method == "POST"
+                and request.url.path.startswith("/api/v1/workspaces/")
+                and request.url.path.endswith(("/inputs/upload", "/inputs/csv"))
+            )
+            if is_file_upload:
+                try:
+                    _require_mutation(request, session_manager, origin)
+                except WorkspaceSecurityError as error:
+                    response = _error_response(
+                        error.code,
+                        str(error),
+                        401 if isinstance(error, UnauthenticatedError) else 403,
+                    )
+                else:
+                    response = await call_next(request)
+            else:
+                response = await call_next(request)
         _add_security_headers(response)
         return response
 
