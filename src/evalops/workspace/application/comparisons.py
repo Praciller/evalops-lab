@@ -12,9 +12,9 @@ from evalops.workspace.comparison.compatibility import (
 )
 from evalops.workspace.comparison.failures import build_failure_transitions
 from evalops.workspace.comparison.models import (
-    ComparisonFailureArtifact,
     ComparisonCompatibility,
     ComparisonCompatibilityStatus,
+    ComparisonFailureArtifact,
     ComparisonMode,
     ComparisonRecord,
 )
