@@ -115,7 +115,7 @@ test("runs filters are URL-driven, reloadable, and history-safe", async ({ page 
   await page.reload();
   await expect(verification).toHaveValue("VERIFIED");
   await expect(dataKind).toHaveValue("SYNTHETIC_FIXTURE");
-  await page.getByRole("button", { name: "Clear Verification filter" }).click();
+  await page.getByRole("button", { name: /Verification: Verified.*clear/ }).click();
   await expect(page).toHaveURL(/\/runs\/\?data=SYNTHETIC_FIXTURE$/);
   await page.getByRole("button", { name: "Clear all filters" }).click();
   await expect(page).toHaveURL(/\/runs\/$/);
@@ -182,7 +182,7 @@ test("duplicate single-select query values remain inert", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Verification" })).toHaveValue("");
   await expect(page.getByText("No filters selected")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Clear Verification filter/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Verification: Verified.*clear/ })).toHaveCount(0);
   await expect(page.locator(".data-table tbody tr")).toHaveCount(3);
 });
 

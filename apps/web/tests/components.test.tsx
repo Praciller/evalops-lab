@@ -86,7 +86,7 @@ describe("Evidence Console components", () => {
 
     fireEvent.change(screen.getByRole("combobox", { name: "Verification" }), { target: { value: "PARTIAL" } });
     expect(routerPush).toHaveBeenCalledWith("/runs/?data=SYNTHETIC_FIXTURE&verification=PARTIAL", { scroll: false });
-    fireEvent.click(screen.getByRole("button", { name: "Clear Verification filter" }));
+    fireEvent.click(screen.getByRole("button", { name: /Verification: Verified.*clear/ }));
     expect(routerPush).toHaveBeenCalledWith("/runs/?data=SYNTHETIC_FIXTURE", { scroll: false });
     fireEvent.click(screen.getByRole("button", { name: "Clear all filters" }));
     expect(routerPush).toHaveBeenCalledWith("/runs/", { scroll: false });

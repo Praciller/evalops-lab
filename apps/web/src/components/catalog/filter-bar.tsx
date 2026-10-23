@@ -48,7 +48,7 @@ export function FilterBar({
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted" aria-live="polite">
         <span>{activeEntries.length ? "Active filters:" : "No filters selected"}</span>
         {activeEntries.map(({ key, label }) => (
-          <button aria-label={`Clear ${label} filter`} className="focus-ring rounded-md px-2 py-1 text-accent underline underline-offset-2" key={key} type="button" onClick={() => onClear(key)}>
+          <button className="focus-ring rounded-md px-2 py-1 text-accent underline underline-offset-2" key={key} type="button" onClick={() => onClear(key)}>
             {label}: {humanizeLabel(active[key] ?? "")} · clear
           </button>
         ))}
