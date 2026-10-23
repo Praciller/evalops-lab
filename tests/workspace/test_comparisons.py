@@ -159,7 +159,10 @@ def test_canonical_rejects_incompatible_and_exploratory_is_permanently_separate(
     assert store.get_comparison_record(ws, record.comparison_id) == record
     with pytest.raises(WorkspaceStorageError, match="already exists"):
         store.save_comparison_record(ws, record)
-    assert store.get_comparison_record(ws, record.comparison_id).mode == ComparisonMode.EXPLORATORY_ONLY
+    assert (
+        store.get_comparison_record(ws, record.comparison_id).mode
+        == ComparisonMode.EXPLORATORY_ONLY
+    )
 
 
 def test_modified_ground_truth_never_allows_canonical_regression_claim(
