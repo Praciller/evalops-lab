@@ -13,6 +13,7 @@ on:
       - 'scripts/run_workspace_e2e_server.py'
       - 'scripts/stage_workspace_assets.py'
       - 'scripts/verify_workspace_wheel.py'
+      - 'scripts/verify_workspace_runtime_boundary.py'
       - '.github/workflows/workspace-ci.yml'
   pull_request:
 
@@ -69,6 +70,12 @@ jobs:
         run: python scripts/stage_workspace_assets.py
       - name: Build release-candidate wheel without publishing
         run: python -m build --wheel
+      - name: Inspect distributable runtime boundaries and exact asset bytes
+        run: |
+          wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
+          test -n "$wheel"
+          python scripts/verify_workspace_runtime_boundary.py --wheel "$wheel"
+          sha256sum "$wheel"
       - name: Validate real wheel files and deterministic SHA-256
         run: |
           wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
