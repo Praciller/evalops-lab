@@ -46,7 +46,7 @@ def inspect_wheel(wheel: Path) -> dict[str, str]:
         if archive.testzip() is not None:
             raise WheelVerificationError("wheel ZIP integrity failed")
         names = {
-            name[len(STATIC_PREFIX):]
+            name[len(STATIC_PREFIX) :]
             for name in archive.namelist()
             if name.startswith(STATIC_PREFIX) and not name.endswith("/")
         }
@@ -63,9 +63,7 @@ def inspect_wheel(wheel: Path) -> dict[str, str]:
             raise WheelVerificationError("packaged static file listing is empty")
         if set(files) != names - {"assets-manifest.json"}:
             raise WheelVerificationError("wheel files differ from the static manifest")
-        if "index.html" not in files or not any(
-            name.startswith("assets/") for name in files
-        ):
+        if "index.html" not in files or not any(name.startswith("assets/") for name in files):
             raise WheelVerificationError("wheel frontend is incomplete")
         for name, expected in files.items():
             if (
@@ -90,8 +88,14 @@ def inspect_wheel(wheel: Path) -> dict[str, str]:
 def _run(args: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
     try:
         result = subprocess.run(
-            args, cwd=cwd, env=env, text=True, encoding="utf-8",
-            capture_output=True, check=True, timeout=180,
+            args,
+            cwd=cwd,
+            env=env,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=True,
+            timeout=180,
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         raise WheelVerificationError(f"subprocess verification failed: {args[0]}") from error
@@ -116,18 +120,31 @@ def _stop(process: subprocess.Popen[str]) -> None:
         process.stdout.close()
 
 
-def _serve(
-    python: Path, root: Path, cwd: Path, port: int
-) -> tuple[subprocess.Popen[str], str]:
+def _serve(python: Path, root: Path, cwd: Path, port: int) -> tuple[subprocess.Popen[str], str]:
     command = [
-        str(python), "-I", "-u", "-m", "evalops", "workspace",
-        "--no-open", "--root", str(root), "--port", str(port),
+        str(python),
+        "-I",
+        "-u",
+        "-m",
+        "evalops",
+        "workspace",
+        "--no-open",
+        "--root",
+        str(root),
+        "--port",
+        str(port),
     ]
     env = {**os.environ, "PYTHONPATH": "", "PYTHONUNBUFFERED": "1"}
     process = subprocess.Popen(
-        command, cwd=cwd, env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace", bufsize=1,
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
     )
     output: queue.Queue[str] = queue.Queue()
 
@@ -146,9 +163,7 @@ def _serve(
                 raise WheelVerificationError("installed workspace process exited early")
             try:
                 line = output.get(timeout=0.25)
-                match = re.search(
-                    rf"http://127\.0\.0\.1:{port}/#bootstrap=[^\s]+", line
-                )
+                match = re.search(rf"http://127\.0\.0\.1:{port}/#bootstrap=[^\s]+", line)
                 if match:
                     bootstrap = match.group(0)
             except queue.Empty:
@@ -197,12 +212,18 @@ def verify_wheel(wheel: Path, *, browser: bool = False) -> None:
         cwd = outside / "outside-checkout"
         cwd.mkdir()
         venv.EnvBuilder(with_pip=True, clear=True).create(environment)
-        python = environment / (
-            "Scripts/python.exe" if os.name == "nt" else "bin/python"
-        )
+        python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         _run(
-            [str(python), "-I", "-m", "pip", "install", "--disable-pip-version-check",
-             "--no-input", f"{wheel}[workspace]"],
+            [
+                str(python),
+                "-I",
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                f"{wheel}[workspace]",
+            ],
             cwd=cwd,
         )
         _run([str(python), "-I", "-m", "evalops", "--help"], cwd=cwd)
@@ -234,7 +255,8 @@ def verify_wheel(wheel: Path, *, browser: bool = False) -> None:
                 }
                 _run(
                     [npm, "run", "test:e2e:packaged"],
-                    cwd=REPO_ROOT / "apps" / "workspace", env=env,
+                    cwd=REPO_ROOT / "apps" / "workspace",
+                    env=env,
                 )
                 registry = json.loads((root / "registry.json").read_text(encoding="utf-8"))
                 if not registry.get("workspace_ids"):
