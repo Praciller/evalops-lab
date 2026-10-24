@@ -11,6 +11,8 @@ on:
       - 'tests/workspace/**'
       - 'scripts/export_workspace_openapi.py'
       - 'scripts/run_workspace_e2e_server.py'
+      - 'scripts/stage_workspace_assets.py'
+      - 'scripts/verify_workspace_wheel.py'
       - '.github/workflows/workspace-ci.yml'
   pull_request:
 
@@ -63,3 +65,17 @@ jobs:
       - name: Playwright E2E tests
         working-directory: apps/workspace
         run: npm run test:e2e
+      - name: Stage checked frontend assets into Python package
+        run: python scripts/stage_workspace_assets.py
+      - name: Build release-candidate wheel without publishing
+        run: python -m build --wheel
+      - name: Validate real wheel files and deterministic SHA-256
+        run: |
+          wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
+          test -n "$wheel"
+          EVALOPS_WHEEL_PATH="$wheel" python -m pytest tests/workspace/test_package_smoke.py -q
+      - name: Verify fresh wheel installation, loopback runtime, browser flow and restart
+        run: |
+          wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
+          test -n "$wheel"
+          python scripts/verify_workspace_wheel.py "$wheel" --browser
