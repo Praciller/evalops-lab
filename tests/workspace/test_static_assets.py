@@ -160,6 +160,8 @@ def test_manifest_is_versioned_and_contains_no_absolute_paths(tmp_path: Path) ->
 def test_missing_packaged_ui_fails_with_actionable_cli_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    pytest.importorskip("fastapi", reason="CLI runtime needs optional Workspace dependencies")
+    pytest.importorskip("uvicorn", reason="CLI runtime needs optional Workspace dependencies")
     import evalops.workspace.assets as assets
 
     def fail() -> Path:
