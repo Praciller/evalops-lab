@@ -32,6 +32,18 @@ async function evaluate(page: Page, predictionInputId?: string): Promise<string>
   return id!;
 }
 
+type PublicArtifactShape = {
+  artifact_type?: string;
+  artifact_id?: string;
+  population_compatibility?: string;
+  baseline_artifact_id?: string;
+  candidate_artifact_id?: string;
+  baseline_run_id?: string;
+  candidate_run_id?: string;
+  catalog_status?: string;
+  artifacts?: { artifact_id: string }[];
+};
+
 type Preview = { eligible: boolean; output_files: {
   filename: string; sha256: string; size_bytes: number;
 }[] };
@@ -121,7 +133,7 @@ test("canonical browser comparison exports four validated artifacts; exploratory
         expect(bytes.toString("utf8")).not.toContain(privateValue);
       }
       return [name, JSON.parse(bytes.toString("utf8"))];
-    }))) as Record<string, any>;
+    }))) as Record<string, PublicArtifactShape>;
     expect(files["baseline.json"].artifact_type).toBe("run");
     expect(files["candidate.json"].artifact_type).toBe("run");
     expect(files["comparison.json"].artifact_type).toBe("comparison");
@@ -131,7 +143,7 @@ test("canonical browser comparison exports four validated artifacts; exploratory
     expect(files["comparison.json"].baseline_run_id).toBe(baseline);
     expect(files["comparison.json"].candidate_run_id).toBe(candidate);
     expect(files["index.json"].catalog_status).toBe("EXPLICIT_ALLOWLIST");
-    const artifacts = files["index.json"].artifacts;
+    const artifacts = files["index.json"].artifacts ?? [];
     expect(artifacts).toHaveLength(3);
     expect(artifacts.map((item: {artifact_id: string}) => item.artifact_id).sort()).toEqual(
       [files["baseline.json"].artifact_id, files["candidate.json"].artifact_id, files["comparison.json"].artifact_id].sort()
