@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +14,7 @@ from evalops.workspace.comparison.models import (
     ComparisonRecord,
     QueryFailureTransition,
 )
+from evalops.workspace.export.models import ExportClassification, ExportManifest
 from evalops.workspace.ingestion.models import InputKind, InputManifest
 from evalops.workspace.jobs.models import JobRecord, JobState, SafeJobError
 from evalops.workspace.models import BaselinePointer, WorkspaceRecord
@@ -199,3 +201,13 @@ class ComparisonFailuresResponse(StrictModel):
     comparison_id: str
     total_count: int
     transitions: list[QueryFailureTransition]
+
+
+class ExportPreviewRequest(StrictModel):
+    source_type: Literal["run", "comparison"]
+    source_id: str = Field(pattern=r"^(?:run|comparison)-[0-9a-f]{32}$")
+    classification: ExportClassification
+
+
+class ExportListResponse(StrictModel):
+    exports: list[ExportManifest]
