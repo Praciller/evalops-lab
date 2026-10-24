@@ -97,7 +97,12 @@ def create_workspace_app(
                 and request.url.path.startswith("/api/v1/workspaces/")
                 and request.url.path.endswith(("/inputs/upload", "/inputs/csv"))
             )
-            if is_file_upload:
+            is_export_mutation = (
+                request.method == "POST"
+                and request.url.path.startswith("/api/v1/workspaces/")
+                and request.url.path.endswith(("/exports/preview", "/exports/confirm"))
+            )
+            if is_file_upload or is_export_mutation:
                 try:
                     _require_mutation(request, session_manager, origin)
                 except WorkspaceSecurityError as error:

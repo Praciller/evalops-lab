@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -88,8 +87,15 @@ def _run(client: TestClient, ws: str, predictions: bytes) -> str:
     pytest.fail("job did not finish")
 
 
-def _preview(client: TestClient, ws: str, source_id: str, source_type: str = "run",
-             *, status: str = "UNVERIFIED", kind: str = "SYNTHETIC_FIXTURE"):
+def _preview(
+    client: TestClient,
+    ws: str,
+    source_id: str,
+    source_type: str = "run",
+    *,
+    status: str = "UNVERIFIED",
+    kind: str = "SYNTHETIC_FIXTURE",
+):
     return client.post(
         f"/api/v1/workspaces/{ws}/exports/preview",
         headers=HEADERS,
@@ -178,7 +184,10 @@ def test_canonical_comparison_exports_only_exact_public_bundle(app_context) -> N
     folder = Path(exported.json()["destination"])
     assert folder.is_dir()
     assert {p.name for p in folder.iterdir()} == {
-        "baseline.json", "candidate.json", "comparison.json", "index.json"
+        "baseline.json",
+        "candidate.json",
+        "comparison.json",
+        "index.json",
     }
     assert "transitions" not in (folder / "comparison.json").read_text("utf-8")
 
@@ -214,7 +223,8 @@ def test_rejects_official_kind_invalid_source_type_and_extra_fields(app_context)
             "source_type": "run",
             "source_id": run,
             "classification": {
-                "verification_status": "UNVERIFIED", "data_kind": "SYNTHETIC_FIXTURE",
+                "verification_status": "UNVERIFIED",
+                "data_kind": "SYNTHETIC_FIXTURE",
                 "claim_scope": "BENCHMARK_RESULT",
             },
         },
@@ -251,7 +261,8 @@ def test_auth_origin_and_cross_workspace_preview_isolation(app_context) -> None:
 
 
 def test_expiry_source_drift_conflict_and_existing_target_safe_errors(
-    app_context, monkeypatch: pytest.MonkeyPatch,
+    app_context,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, _, ws, destination, tmp = app_context
     run = _run(client, ws, GOOD)

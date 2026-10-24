@@ -57,9 +57,7 @@ def register_export_routes(
             return _safe_error(422, "invalid_source_type", "source type does not match source ID")
         try:
             if payload.source_type == "run":
-                return service.preview_run(
-                    workspace_id, payload.source_id, payload.classification
-                )
+                return service.preview_run(workspace_id, payload.source_id, payload.classification)
             return service.preview_comparison(
                 workspace_id, payload.source_id, payload.classification
             )
@@ -100,7 +98,9 @@ def register_export_routes(
             )
         except OSError:
             return _safe_error(
-                500, "export_write_failed", "export could not be written to the selected destination"
+                500,
+                "export_write_failed",
+                "export could not be written to the selected destination",
             )
         except WorkspaceStorageError:
             return _safe_error(
