@@ -1,6 +1,54 @@
 {
   "components": {
     "schemas": {
+      "BaselinePointer": {
+        "additionalProperties": false,
+        "description": "Explicit snapshot of a completed local run, not an editable artifact.",
+        "properties": {
+          "pinned_at": {
+            "format": "date-time",
+            "title": "Pinned At",
+            "type": "string"
+          },
+          "result_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Result Sha256",
+            "type": "string"
+          },
+          "run_id": {
+            "pattern": "^run-[0-9a-f]{32}$",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "result_sha256",
+          "pinned_at"
+        ],
+        "title": "BaselinePointer",
+        "type": "object"
+      },
+      "BaselineResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaselinePointer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "baseline"
+        ],
+        "title": "BaselineResponse",
+        "type": "object"
+      },
       "Body_csv_input_api_v1_workspaces__workspace_id__inputs_csv_post": {
         "properties": {
           "document_ids_column": {
@@ -67,6 +115,224 @@
         "title": "BootstrapRequest",
         "type": "object"
       },
+      "ComparisonCompatibility": {
+        "additionalProperties": false,
+        "properties": {
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/CompatibilityReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComparisonCompatibilityStatus"
+          }
+        },
+        "required": [
+          "status",
+          "reasons"
+        ],
+        "title": "ComparisonCompatibility",
+        "type": "object"
+      },
+      "ComparisonCompatibilityStatus": {
+        "enum": [
+          "COMPARABLE",
+          "NON_COMPARABLE"
+        ],
+        "title": "ComparisonCompatibilityStatus",
+        "type": "string"
+      },
+      "ComparisonConflictResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility": {
+            "$ref": "#/components/schemas/ComparisonCompatibility"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error",
+          "compatibility"
+        ],
+        "title": "ComparisonConflictResponse",
+        "type": "object"
+      },
+      "ComparisonFailuresResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "comparison_id": {
+            "title": "Comparison Id",
+            "type": "string"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/QueryFailureTransition"
+            },
+            "title": "Transitions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "comparison_id",
+          "total_count",
+          "transitions"
+        ],
+        "title": "ComparisonFailuresResponse",
+        "type": "object"
+      },
+      "ComparisonListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "comparisons": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonRecord"
+            },
+            "title": "Comparisons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "comparisons"
+        ],
+        "title": "ComparisonListResponse",
+        "type": "object"
+      },
+      "ComparisonMode": {
+        "enum": [
+          "CANONICAL",
+          "EXPLORATORY_ONLY"
+        ],
+        "title": "ComparisonMode",
+        "type": "string"
+      },
+      "ComparisonRecord": {
+        "additionalProperties": false,
+        "description": "Immutable local comparison; exploratory claims never become canonical.",
+        "properties": {
+          "baseline_result_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Baseline Result Sha256",
+            "type": "string"
+          },
+          "baseline_run_id": {
+            "pattern": "^run-[0-9a-f]{32}$",
+            "title": "Baseline Run Id",
+            "type": "string"
+          },
+          "candidate_result_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Candidate Result Sha256",
+            "type": "string"
+          },
+          "candidate_run_id": {
+            "pattern": "^run-[0-9a-f]{32}$",
+            "title": "Candidate Run Id",
+            "type": "string"
+          },
+          "comparison_id": {
+            "pattern": "^comparison-[0-9a-f]{32}$",
+            "title": "Comparison Id",
+            "type": "string"
+          },
+          "compatibility": {
+            "$ref": "#/components/schemas/ComparisonCompatibility"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ComparisonMode"
+          },
+          "policy_version": {
+            "const": "workspace-retrieval-regression-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "regression_report": {
+            "$ref": "#/components/schemas/RegressionReport"
+          },
+          "schema_version": {
+            "const": "workspace-comparison-v1",
+            "default": "workspace-comparison-v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^ws-[0-9a-f]{32}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comparison_id",
+          "workspace_id",
+          "mode",
+          "compatibility",
+          "baseline_run_id",
+          "baseline_result_sha256",
+          "candidate_run_id",
+          "candidate_result_sha256",
+          "policy_version",
+          "regression_report",
+          "created_at"
+        ],
+        "title": "ComparisonRecord",
+        "type": "object"
+      },
+      "CompatibilityReason": {
+        "additionalProperties": false,
+        "description": "Safe reason: field plus non-sensitive mismatch indicators only.",
+        "properties": {
+          "baseline": {
+            "title": "Baseline",
+            "type": "string"
+          },
+          "candidate": {
+            "title": "Candidate",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "baseline",
+          "candidate"
+        ],
+        "title": "CompatibilityReason",
+        "type": "object"
+      },
+      "CreateComparisonRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_run_id": {
+            "pattern": "^run-[0-9a-f]{32}$",
+            "title": "Candidate Run Id",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ComparisonMode",
+            "default": "CANONICAL"
+          }
+        },
+        "required": [
+          "candidate_run_id"
+        ],
+        "title": "CreateComparisonRequest",
+        "type": "object"
+      },
       "CreateRetrievalRun": {
         "additionalProperties": false,
         "properties": {
@@ -119,6 +385,88 @@
         ],
         "title": "CreateRetrievalRun",
         "type": "object"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "field",
+          "retryable"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "FailureCategory": {
+        "description": "Initial RAG failure vocabulary.",
+        "enum": [
+          "PASS",
+          "RETRIEVAL_MISS",
+          "WRONG_ANSWER",
+          "HALLUCINATION",
+          "UNSUPPORTED_CLAIM",
+          "WRONG_CITATION",
+          "INCOMPLETE_ANSWER",
+          "CONTEXT_CONFLICT",
+          "SHOULD_ABSTAIN",
+          "DATASET_AMBIGUOUS",
+          "GROUND_TRUTH_ERROR",
+          "HALLUCINATION_FALSE_POSITIVE",
+          "HALLUCINATION_FALSE_NEGATIVE",
+          "PARTIAL_SPAN_MATCH",
+          "EVALUATOR_UNCERTAIN"
+        ],
+        "title": "FailureCategory",
+        "type": "string"
+      },
+      "FailureTransition": {
+        "enum": [
+          "UNCHANGED_PASS",
+          "REGRESSED",
+          "IMPROVED",
+          "PERSISTENT_FAILURE",
+          "CHANGED_FAILURE"
+        ],
+        "title": "FailureTransition",
+        "type": "string"
       },
       "HTTPValidationError": {
         "properties": {
@@ -293,6 +641,78 @@
         "title": "JobSummary",
         "type": "object"
       },
+      "MetricComparison": {
+        "description": "Traceable comparison between baseline and current values.",
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/MetricDirection"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RegressionStatus"
+          }
+        },
+        "required": [
+          "metric_name",
+          "direction",
+          "baseline",
+          "current",
+          "delta",
+          "status",
+          "reason"
+        ],
+        "title": "MetricComparison",
+        "type": "object"
+      },
+      "MetricDirection": {
+        "description": "Whether larger or smaller metric values are preferred.",
+        "enum": [
+          "higher_is_better",
+          "lower_is_better"
+        ],
+        "title": "MetricDirection",
+        "type": "string"
+      },
       "PairRequest": {
         "additionalProperties": false,
         "properties": {
@@ -362,6 +782,50 @@
         "title": "PairResponse",
         "type": "object"
       },
+      "QueryFailureTransition": {
+        "additionalProperties": false,
+        "description": "Local-only query diagnosis derived from existing evaluator artifacts.",
+        "properties": {
+          "baseline_category": {
+            "$ref": "#/components/schemas/FailureCategory"
+          },
+          "baseline_metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Baseline Metrics",
+            "type": "object"
+          },
+          "candidate_category": {
+            "$ref": "#/components/schemas/FailureCategory"
+          },
+          "candidate_metrics": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Candidate Metrics",
+            "type": "object"
+          },
+          "query_id": {
+            "minLength": 1,
+            "title": "Query Id",
+            "type": "string"
+          },
+          "transition": {
+            "$ref": "#/components/schemas/FailureTransition"
+          }
+        },
+        "required": [
+          "query_id",
+          "transition",
+          "baseline_category",
+          "candidate_category",
+          "baseline_metrics",
+          "candidate_metrics"
+        ],
+        "title": "QueryFailureTransition",
+        "type": "object"
+      },
       "ReferenceInputRequest": {
         "additionalProperties": false,
         "properties": {
@@ -381,6 +845,38 @@
         ],
         "title": "ReferenceInputRequest",
         "type": "object"
+      },
+      "RegressionReport": {
+        "description": "Aggregate regression result.",
+        "properties": {
+          "comparisons": {
+            "items": {
+              "$ref": "#/components/schemas/MetricComparison"
+            },
+            "title": "Comparisons",
+            "type": "array"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "passed",
+          "comparisons"
+        ],
+        "title": "RegressionReport",
+        "type": "object"
+      },
+      "RegressionStatus": {
+        "description": "Outcome for one configured metric.",
+        "enum": [
+          "PASS",
+          "REGRESSION",
+          "MISSING"
+        ],
+        "title": "RegressionStatus",
+        "type": "string"
       },
       "RunListResponse": {
         "additionalProperties": false,
@@ -573,6 +1069,26 @@
           "authenticated"
         ],
         "title": "SessionInfo",
+        "type": "object"
+      },
+      "SetBaselineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_replace": {
+            "default": false,
+            "title": "Confirm Replace",
+            "type": "boolean"
+          },
+          "run_id": {
+            "pattern": "^run-[0-9a-f]{32}$",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "SetBaselineRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -1058,6 +1574,364 @@
           }
         },
         "summary": "Rename Workspace"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/baseline": {
+      "get": {
+        "operationId": "get_baseline_api_v1_workspaces__workspace_id__baseline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaselineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Baseline"
+      },
+      "put": {
+        "operationId": "put_baseline_api_v1_workspaces__workspace_id__baseline_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBaselineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaselineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Baseline"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/comparisons": {
+      "get": {
+        "operationId": "list_comparisons_api_v1_workspaces__workspace_id__comparisons_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Comparisons"
+      },
+      "post": {
+        "operationId": "post_comparison_api_v1_workspaces__workspace_id__comparisons_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateComparisonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Comparison"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/comparisons/{comparison_id}": {
+      "get": {
+        "operationId": "get_comparison_api_v1_workspaces__workspace_id__comparisons__comparison_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "title": "Comparison Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Comparison"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/comparisons/{comparison_id}/failures": {
+      "get": {
+        "operationId": "list_failure_transitions_api_v1_workspaces__workspace_id__comparisons__comparison_id__failures_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "title": "Comparison Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transition",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FailureTransition"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transition"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FailureCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exact",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Exact",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonFailuresResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Failure Transitions"
       }
     },
     "/api/v1/workspaces/{workspace_id}/inputs": {
