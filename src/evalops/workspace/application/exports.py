@@ -6,13 +6,21 @@ existing Public Evidence Contract V1 adapter, models and serializer.
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
+import os
 import re
+import shutil
+import sys
+import tempfile
 import threading
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -34,12 +42,123 @@ from evalops.workspace.comparison.models import (
 )
 from evalops.workspace.comparison.policy import build_workspace_retrieval_rules
 from evalops.workspace.export.models import (
+    ConfirmExportRequest,
     ExportClassification,
+    ExportedFile,
+    ExportManifest,
     ExportPreview,
     PreviewFile,
     WorkspaceExportDataKind,
 )
 from evalops.workspace.storage import WorkspaceStorageError, WorkspaceStore
+
+
+def _explicit_destination(raw_path: str) -> Path:
+    """Accept only an existing, explicitly named regular local directory."""
+
+    if raw_path != raw_path.strip() or not raw_path.strip():
+        raise ValueError("an explicit destination directory is required")
+    destination = Path(raw_path)
+    if not destination.is_absolute() or destination.is_symlink():
+        raise ValueError("destination must be an absolute non-symlink directory")
+    try:
+        resolved = destination.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("destination directory is unavailable") from error
+    if not resolved.is_dir():
+        raise ValueError("destination must be an existing directory")
+    return resolved
+
+
+def _exclusive_directory_commit(staged: Path, target: Path) -> None:
+    """Atomically publish a complete directory without replacing any target.
+
+    Linux uses renameat2(RENAME_NOREPLACE); Windows os.rename refuses an
+    existing directory. Other platforms fail closed rather than risking
+    POSIX os.rename replacing an existing empty directory.
+    """
+
+    if os.name == "nt":
+        staged.rename(target)
+        return
+    if sys.platform.startswith("linux"):
+        library = ctypes.CDLL(None, use_errno=True)
+        renameat2 = getattr(library, "renameat2", None)
+        if renameat2 is None:
+            raise OSError(errno.ENOTSUP, "exclusive directory rename unavailable")
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        at_fdcwd = -100
+        no_replace = 1
+        outcome = renameat2(
+            at_fdcwd, os.fsencode(staged), at_fdcwd, os.fsencode(target), no_replace
+        )
+        if outcome != 0:
+            code = ctypes.get_errno()
+            raise OSError(code, os.strerror(code), str(target))
+        return
+    raise OSError(errno.ENOTSUP, "exclusive directory rename unavailable")
+
+
+def _write_export_files(destination: Path, files: Mapping[str, bytes]) -> Path:
+    """Stage complete output on the same volume, refusing all overwrites."""
+
+    if len(files) == 1:
+        filename, content = next(iter(files.items()))
+        if "/" in filename or "\\" in filename or not re.fullmatch(r"[a-z0-9-]+\.json", filename):
+            raise ValueError("invalid run export filename")
+        target = destination / filename
+        if target.exists() or target.is_symlink():
+            raise FileExistsError("export destination already exists")
+        descriptor, name = tempfile.mkstemp(prefix=".evalops-export-", dir=destination)
+        staged = Path(name)
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                output.write(content)
+                output.flush()
+                os.fsync(output.fileno())
+            # Hard-link creation is atomic and fails if the target appeared.
+            os.link(staged, target)
+        finally:
+            staged.unlink(missing_ok=True)
+        return target
+
+    if len(files) != 4:
+        raise ValueError("invalid comparison export bundle")
+    parts = [name.split("/") for name in files]
+    folders = {part[0] for part in parts}
+    basenames = {part[1] for part in parts if len(part) == 2}
+    if (
+        len(folders) != 1
+        or any(len(part) != 2 for part in parts)
+        or not re.fullmatch(r"[a-z0-9-]+", next(iter(folders)))
+        or basenames != {"baseline.json", "candidate.json", "comparison.json", "index.json"}
+    ):
+        raise ValueError("invalid comparison export layout")
+    target = destination / next(iter(folders))
+    if target.exists() or target.is_symlink():
+        raise FileExistsError("export bundle destination already exists")
+
+    staged = Path(tempfile.mkdtemp(prefix=".evalops-bundle-", dir=destination))
+    try:
+        for name, data in sorted(files.items()):
+            output_path = staged / name.split("/")[1]
+            with output_path.open("xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+        _exclusive_directory_commit(staged, target)
+    finally:
+        if staged.exists():
+            shutil.rmtree(staged)
+    return target
+
 
 PREVIEW_LIFETIME = timedelta(minutes=15)
 _RUN_ID = re.compile(r"^run-[0-9a-f]{32}$")
@@ -61,6 +180,9 @@ _TRANSFORMED = [
 class _PreparedExport:
     workspace_id: str
     expires_at: datetime
+    source_type: Literal["run", "comparison"]
+    source_id: str
+    classification: ExportClassification
     files: Mapping[str, bytes]
 
 
@@ -163,6 +285,9 @@ class ExportService:
             self._prepared[preview_id] = _PreparedExport(
                 workspace_id=workspace_id,
                 expires_at=expires_at,
+                source_type="run",
+                source_id=run_id,
+                classification=classification,
                 files={filename: encoded},
             )
 
@@ -342,6 +467,9 @@ class ExportService:
             self._prepared[preview_id] = _PreparedExport(
                 workspace_id=workspace_id,
                 expires_at=expires_at,
+                source_type="comparison",
+                source_id=comparison_id,
+                classification=classification,
                 files=serialized,
             )
         return ExportPreview(
@@ -360,6 +488,71 @@ class ExportService:
             classification=classification,
             expires_at=expires_at,
         )
+
+    def confirm(self, workspace_id: str, request: ConfirmExportRequest) -> ExportManifest:
+        """Commit an exact previously previewed snapshot, never auto-publish.
+
+        This is a second explicit owner action. A fresh sanitized preview must
+        match the exact cached bytes; any changed source is rejected.
+        """
+
+        with self._lock:
+            now = self._clock()
+            if now.tzinfo is None:
+                raise ValueError("confirmation clock must be timezone-aware")
+            self._purge_expired(now)
+            prepared = self._prepared.get(request.preview_id)
+            if prepared is None or prepared.workspace_id != workspace_id:
+                raise LookupError("export preview is unavailable or expired")
+
+            # Compare to a freshly verified source, not just the cached JSON.
+            if prepared.source_type == "run":
+                rechecked = self.preview_run(
+                    workspace_id, prepared.source_id, prepared.classification
+                )
+            elif prepared.source_type == "comparison":
+                rechecked = self.preview_comparison(
+                    workspace_id, prepared.source_id, prepared.classification
+                )
+            else:
+                raise ValueError("unsupported export source")
+            try:
+                fresh = self._prepared.get(rechecked.preview_id)
+                if not rechecked.eligible or fresh is None or fresh.files != prepared.files:
+                    raise ValueError("source changed since export preview")
+            finally:
+                self._prepared.pop(rechecked.preview_id, None)
+
+            destination = _explicit_destination(request.destination_directory)
+            try:
+                target = _write_export_files(destination, prepared.files)
+            except FileExistsError as error:
+                raise ValueError("export destination already exists") from error
+
+            files = [
+                ExportedFile(
+                    filename=name,
+                    sha256=hashlib.sha256(contents).hexdigest(),
+                    size_bytes=len(contents),
+                )
+                for name, contents in prepared.files.items()
+            ]
+            manifest = ExportManifest(
+                export_id=f"export-{uuid.uuid4().hex}",
+                source_type=prepared.source_type,
+                source_id=prepared.source_id,
+                destination=str(target),
+                files=files,
+                classification=prepared.classification,
+                created_at=now,
+            )
+            # Private history records only completed destination writes. If
+            # persistence fails, do not delete or overwrite user-owned output.
+            self._store.save_export_manifest(
+                workspace_id, manifest.export_id, manifest.model_dump(mode="json")
+            )
+            self._prepared.pop(request.preview_id, None)
+            return manifest
 
     def get_prepared_files(self, workspace_id: str, preview_id: str) -> dict[str, bytes]:
         """Internal, owner-scoped copy for the later explicit confirmation use-case.
