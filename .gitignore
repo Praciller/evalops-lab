@@ -41,3 +41,6 @@ playwright-report/
 test-results/
 torch_extensions/
 .torch/
+
+# Generated local UI packaging assets (build using stage_workspace_assets.py)
+src/evalops/workspace/static/
