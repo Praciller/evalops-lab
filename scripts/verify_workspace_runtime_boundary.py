@@ -122,9 +122,7 @@ def verify_runtime_boundary(dist: Path, staged: Path, wheel: Path) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dist", type=Path, default=ROOT / "apps" / "workspace" / "dist"
-    )
+    parser.add_argument("--dist", type=Path, default=ROOT / "apps" / "workspace" / "dist")
     parser.add_argument(
         "--staged", type=Path, default=ROOT / "src" / "evalops" / "workspace" / "static"
     )
