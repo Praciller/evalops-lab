@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-route
 import { WorkspaceSummary } from "./api/schemas";
 import ComparisonDetail from "./pages/ComparisonDetail";
 import ComparisonsPage from "./pages/ComparisonsPage";
+import ExportsPage from "./pages/ExportsPage";
 import FailuresPage from "./pages/FailuresPage";
 import JobProgress from "./pages/JobProgress";
 import RunResult from "./pages/RunResult";
@@ -12,9 +13,9 @@ import WorkspaceRuns from "./pages/WorkspaceRuns";
 function PlannedSection({ title }: { title: string }) {
   return (
     <section className="surface">
-      <p className="eyebrow">NOT AVAILABLE IN PHASE 6.3</p>
+      <p className="eyebrow">SELECT A WORKSPACE</p>
       <h2>{title}</h2>
-      <p>This section is planned for Phase 6.4. No public evidence export is available here.</p>
+      <p>Create or select a local workspace to continue.</p>
       <Link className="text-link" to="/">Return to overview</Link>
     </section>
   );
@@ -36,15 +37,15 @@ export function WorkspaceRoutes({ overview, workspaces }: Props) {
             <NavLink end to={`/workspaces/${selectedWorkspace}/runs`} className={({ isActive }) => isActive ? "active" : ""}>Runs</NavLink>
             <NavLink to={`/workspaces/${selectedWorkspace}/comparisons`} className={({ isActive }) => isActive ? "active" : ""}>Comparisons</NavLink>
             <NavLink to={`/workspaces/${selectedWorkspace}/failures`} className={({ isActive }) => isActive ? "active" : ""}>Failures</NavLink>
+            <NavLink to={`/workspaces/${selectedWorkspace}/exports`} className={({ isActive }) => isActive ? "active" : ""}>Exports</NavLink>
           </>
         ) : (
           <>
-            {(["Inputs", "Runs", "Comparisons", "Failures"] as const).map((title) => (
+            {(["Inputs", "Runs", "Comparisons", "Failures", "Exports"] as const).map((title) => (
               <span key={title} aria-disabled="true">{title}</span>
             ))}
           </>
         )}
-        <span aria-disabled="true" title="Evidence export is planned for Phase 6.4">Exports</span>
       </nav>
       <Routes>
         <Route path="/" element={overview} />
@@ -56,13 +57,16 @@ export function WorkspaceRoutes({ overview, workspaces }: Props) {
         <Route path="/workspaces/:workspaceId/comparisons/:comparisonId" element={<ComparisonDetail />} />
         <Route path="/workspaces/:workspaceId/comparisons/:comparisonId/failures" element={<FailuresPage />} />
         <Route path="/workspaces/:workspaceId/failures" element={<FailuresPage />} />
+        <Route path="/workspaces/:workspaceId/exports" element={<ExportsPage />} />
         <Route path="/comparisons" element={selectedWorkspace ? (
           <Navigate to={`/workspaces/${selectedWorkspace}/comparisons`} replace />
         ) : <PlannedSection title="Comparisons" />} />
         <Route path="/failures" element={selectedWorkspace ? (
           <Navigate to={`/workspaces/${selectedWorkspace}/failures`} replace />
         ) : <PlannedSection title="Failures" />} />
-        <Route path="/exports" element={<PlannedSection title="Exports" />} />
+        <Route path="/exports" element={selectedWorkspace ? (
+          <Navigate to={`/workspaces/${selectedWorkspace}/exports`} replace />
+        ) : <PlannedSection title="Exports" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

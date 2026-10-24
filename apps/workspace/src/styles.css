@@ -581,3 +581,81 @@ code {
 @media (max-width: 620px) {
   .comparison-table { min-width: 620px; }
 }
+
+
+/* Phase 6.4 — two-step local export and readable security disclosures. */
+.export-disclosure-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.export-disclosure {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  min-width: 0;
+}
+
+.export-disclosure h4,
+.export-disclosure p {
+  margin: 0 0 var(--space-sm);
+}
+
+.export-disclosure ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+  overflow-wrap: anywhere;
+}
+
+.export-file-list {
+  display: grid;
+  list-style: none;
+  gap: var(--space-xs);
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.export-file-list li {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-sm) 0;
+  overflow-wrap: anywhere;
+}
+
+.export-file-list code {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.export-file-list li:last-child {
+  border: 0;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+textarea:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (max-width: 760px) {
+  .export-disclosure-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -29,6 +29,12 @@ import {
   ComparisonFailuresResponse,
   ComparisonFailuresResponseSchema,
   FailureTransition,
+  ExportPreview,
+  ExportPreviewSchema,
+  ExportPreviewRequest,
+  ExportManifest,
+  ExportManifestSchema,
+  ExportListResponseSchema,
 } from "./schemas";
 
 export class WorkspaceApiError extends Error {
@@ -347,4 +353,32 @@ export async function listComparisonFailures(
     `/api/v1/workspaces/${workspaceId}/comparisons/${comparisonId}/failures${query ? `?${query}` : ""}`,
     ComparisonFailuresResponseSchema
   );
+}
+
+export async function createExportPreview(
+  workspaceId: string, request: ExportPreviewRequest
+): Promise<ExportPreview> {
+  return typedJson(
+    `/api/v1/workspaces/${workspaceId}/exports/preview`,
+    ExportPreviewSchema,
+    sendJson(request),
+  );
+}
+
+export async function confirmExport(
+  workspaceId: string, previewId: string, destinationDirectory: string
+): Promise<ExportManifest> {
+  return typedJson(
+    `/api/v1/workspaces/${workspaceId}/exports/confirm`,
+    ExportManifestSchema,
+    sendJson({ preview_id: previewId, destination_directory: destinationDirectory }),
+  );
+}
+
+export async function listExports(workspaceId: string): Promise<ExportManifest[]> {
+  const data = await typedJson(
+    `/api/v1/workspaces/${workspaceId}/exports`,
+    ExportListResponseSchema,
+  );
+  return data.exports;
 }

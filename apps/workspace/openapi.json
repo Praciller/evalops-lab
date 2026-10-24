@@ -314,6 +314,29 @@
         "title": "CompatibilityReason",
         "type": "object"
       },
+      "ConfirmExportRequest": {
+        "additionalProperties": false,
+        "description": "Second explicit owner action; destination is never inferred.",
+        "properties": {
+          "destination_directory": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Destination Directory",
+            "type": "string"
+          },
+          "preview_id": {
+            "pattern": "^preview-[0-9a-f]{32}$",
+            "title": "Preview Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preview_id",
+          "destination_directory"
+        ],
+        "title": "ConfirmExportRequest",
+        "type": "object"
+      },
       "CreateComparisonRequest": {
         "additionalProperties": false,
         "properties": {
@@ -433,6 +456,256 @@
           "error"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "ExportClassification": {
+        "additionalProperties": false,
+        "description": "Owner-entered classification; completion cannot imply VERIFIED.",
+        "properties": {
+          "data_kind": {
+            "$ref": "#/components/schemas/WorkspaceExportDataKind"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "verification_status": {
+            "$ref": "#/components/schemas/VerificationStatus"
+          }
+        },
+        "required": [
+          "verification_status",
+          "data_kind"
+        ],
+        "title": "ExportClassification",
+        "type": "object"
+      },
+      "ExportListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "exports": {
+            "items": {
+              "$ref": "#/components/schemas/ExportManifest"
+            },
+            "title": "Exports",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exports"
+        ],
+        "title": "ExportListResponse",
+        "type": "object"
+      },
+      "ExportManifest": {
+        "additionalProperties": false,
+        "description": "Private history only; never included in public export artifacts.",
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/ExportClassification"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "export_id": {
+            "pattern": "^export-[0-9a-f]{32}$",
+            "title": "Export Id",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ExportedFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "workspace-export-manifest-v1",
+            "default": "workspace-export-manifest-v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^(?:run|comparison)-[0-9a-f]{32}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "run",
+              "comparison"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "export_id",
+          "source_type",
+          "source_id",
+          "destination",
+          "files",
+          "classification",
+          "created_at"
+        ],
+        "title": "ExportManifest",
+        "type": "object"
+      },
+      "ExportPreview": {
+        "additionalProperties": false,
+        "description": "Pre-confirmation preview: no path, content, or publish affordance.",
+        "properties": {
+          "blocking_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Reasons",
+            "type": "array"
+          },
+          "classification": {
+            "$ref": "#/components/schemas/ExportClassification"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "included": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Included",
+            "type": "array"
+          },
+          "output_files": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewFile"
+            },
+            "title": "Output Files",
+            "type": "array"
+          },
+          "preview_id": {
+            "pattern": "^preview-[0-9a-f]{32}$",
+            "title": "Preview Id",
+            "type": "string"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "workspace-export-preview-v1",
+            "default": "workspace-export-preview-v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^(?:run|comparison)-[0-9a-f]{32}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "run",
+              "comparison"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "transformed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Transformed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "preview_id",
+          "source_type",
+          "source_id",
+          "eligible",
+          "blocking_reasons",
+          "output_files",
+          "included",
+          "removed",
+          "transformed",
+          "classification",
+          "expires_at"
+        ],
+        "title": "ExportPreview",
+        "type": "object"
+      },
+      "ExportPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/ExportClassification"
+          },
+          "source_id": {
+            "pattern": "^(?:run|comparison)-[0-9a-f]{32}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "run",
+              "comparison"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_type",
+          "source_id",
+          "classification"
+        ],
+        "title": "ExportPreviewRequest",
+        "type": "object"
+      },
+      "ExportedFile": {
+        "additionalProperties": false,
+        "description": "One confirmed output with its exact canonical digest.",
+        "properties": {
+          "filename": {
+            "pattern": "^(?:[a-z0-9-]+/)?[a-z0-9-]+\\.json$",
+            "title": "Filename",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filename",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "ExportedFile",
         "type": "object"
       },
       "FailureCategory": {
@@ -780,6 +1053,34 @@
           "warning_codes"
         ],
         "title": "PairResponse",
+        "type": "object"
+      },
+      "PreviewFile": {
+        "additionalProperties": false,
+        "description": "A disclosure of one exact, canonical, in-memory serialized output.",
+        "properties": {
+          "filename": {
+            "pattern": "^(?:[a-z0-9-]+/)?[a-z0-9-]+\\.json$",
+            "title": "Filename",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filename",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "PreviewFile",
         "type": "object"
       },
       "QueryFailureTransition": {
@@ -1130,6 +1431,25 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VerificationStatus": {
+        "enum": [
+          "VERIFIED",
+          "PARTIAL",
+          "UNVERIFIED",
+          "NOT_RUN"
+        ],
+        "title": "VerificationStatus",
+        "type": "string"
+      },
+      "WorkspaceExportDataKind": {
+        "description": "Ad-hoc Workspace cannot assert official benchmark provenance.",
+        "enum": [
+          "SYNTHETIC_FIXTURE",
+          "CURATED_DATASET"
+        ],
+        "title": "WorkspaceExportDataKind",
+        "type": "string"
       },
       "WorkspaceListResponse": {
         "additionalProperties": false,
@@ -1932,6 +2252,153 @@
           }
         },
         "summary": "List Failure Transitions"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/exports": {
+      "get": {
+        "operationId": "get_export_history_api_v1_workspaces__workspace_id__exports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Export History"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/exports/confirm": {
+      "post": {
+        "operationId": "confirm_export_api_v1_workspaces__workspace_id__exports_confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Confirm Export"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/exports/preview": {
+      "post": {
+        "operationId": "create_export_preview_api_v1_workspaces__workspace_id__exports_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create Export Preview"
       }
     },
     "/api/v1/workspaces/{workspace_id}/inputs": {

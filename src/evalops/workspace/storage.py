@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from evalops.workspace.comparison.models import ComparisonFailureArtifact, ComparisonRecord
+from evalops.workspace.export.models import ExportManifest
 from evalops.workspace.ingestion.models import (
     MAX_INPUT_BYTES,
     InputKind,
@@ -284,6 +285,38 @@ class WorkspaceStore:
         if path.is_symlink() or path.exists():
             raise WorkspaceStorageError("export manifest already exists")
         _atomic_create_json(path, payload)
+
+    def list_export_manifests(self, workspace_id: str) -> list[ExportManifest]:
+        """Read only owner-scoped immutable completed-export history."""
+
+        self.get_workspace(workspace_id)
+        root = (self._workspaces_path / workspace_id).resolve(strict=True)
+        if not root.is_relative_to(self._workspaces_path.resolve(strict=True)):
+            raise WorkspaceStorageError("unsafe export manifest directory")
+        exports = root / "exports"
+        manifests = exports / "manifests"
+        if exports.is_symlink() or manifests.is_symlink():
+            raise WorkspaceStorageError("unsafe export manifest directory")
+        if not manifests.exists():
+            return []
+        if not manifests.is_dir():
+            raise WorkspaceStorageError("invalid export manifest directory")
+        results = []
+        for path in sorted(manifests.iterdir()):
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or not re.fullmatch(r"export-[0-9a-f]{32}\.json", path.name)
+            ):
+                raise WorkspaceStorageError("invalid export manifest entry")
+            try:
+                manifest = ExportManifest.model_validate(_read_json(path))
+            except (ValidationError, ValueError) as error:
+                raise WorkspaceStorageError("invalid export manifest evidence") from error
+            if manifest.export_id != path.stem:
+                raise WorkspaceStorageError("invalid export manifest identity")
+            results.append(manifest)
+        return sorted(results, key=lambda row: (row.created_at, row.export_id))
 
     def list_inputs(self, workspace_id: str) -> list[InputManifest]:
         self.get_workspace(workspace_id)

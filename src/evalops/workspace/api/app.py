@@ -24,6 +24,7 @@ from evalops.workspace.api.models import (
     WorkspaceSummary,
 )
 from evalops.workspace.api.routes_comparisons import register_comparison_routes
+from evalops.workspace.api.routes_exports import register_export_routes
 from evalops.workspace.api.routes_inputs import register_input_routes
 from evalops.workspace.api.routes_jobs import register_job_routes
 from evalops.workspace.api.routes_runs import register_run_routes
@@ -96,7 +97,12 @@ def create_workspace_app(
                 and request.url.path.startswith("/api/v1/workspaces/")
                 and request.url.path.endswith(("/inputs/upload", "/inputs/csv"))
             )
-            if is_file_upload:
+            is_export_mutation = (
+                request.method == "POST"
+                and request.url.path.startswith("/api/v1/workspaces/")
+                and request.url.path.endswith(("/exports/preview", "/exports/confirm"))
+            )
+            if is_file_upload or is_export_mutation:
                 try:
                     _require_mutation(request, session_manager, origin)
                 except WorkspaceSecurityError as error:
@@ -214,6 +220,7 @@ def create_workspace_app(
     register_run_routes(app, store, run_service, require_read, require_write)
     register_job_routes(app, store, run_service, require_read, require_write)
     register_comparison_routes(app, store, require_read, require_write)
+    register_export_routes(app, store, require_read, require_write)
 
     if static_dir is not None:
         static_root = static_dir.resolve()
