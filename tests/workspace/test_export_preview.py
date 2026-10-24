@@ -38,9 +38,7 @@ class FixtureStore:
         self.result = result
         self.reads: list[tuple[str, str]] = []
 
-    def get_run_artifacts(
-        self, workspace_id: str, run_id: str
-    ) -> tuple[EvaluationResult, None]:
+    def get_run_artifacts(self, workspace_id: str, run_id: str) -> tuple[EvaluationResult, None]:
         self.reads.append((workspace_id, run_id))
         if workspace_id != WORKSPACE_ID or run_id != RUN_ID:
             raise WorkspaceStorageError("Sensitive /private/path")
@@ -133,8 +131,13 @@ def test_preview_uses_authoritative_adapter_and_exact_canonical_bytes(
     assert preview.output_files[0].size_bytes == len(expected)
     assert str(tmp_path) not in files[filename].decode("utf-8")
     for private_text in (
-        "private_input_file", "private_session", "bootstrap",
-        "raw-predictions.jsonl", "source_path", "job_id", "session_token",
+        "private_input_file",
+        "private_session",
+        "bootstrap",
+        "raw-predictions.jsonl",
+        "source_path",
+        "job_id",
+        "session_token",
     ):
         assert private_text not in files[filename].decode("utf-8")
     assert not list(tmp_path.iterdir()), "Preview must not persist any file before confirmation"
@@ -149,7 +152,9 @@ def test_curated_classification_suppresses_per_query_and_is_protocol_specific(
     )
     assert preview.eligible
     assert "Validated synthetic per-query evidence" not in preview.included
-    artifact = json.loads(next(iter(service.get_prepared_files(WORKSPACE_ID, preview.preview_id).values())))
+    artifact = json.loads(
+        next(iter(service.get_prepared_files(WORKSPACE_ID, preview.preview_id).values()))
+    )
     assert artifact["data_kind"] == "CURATED_DATASET"
     assert artifact["claim_scope"] == "PROTOCOL_SPECIFIC"
     assert artifact["verification_status"] == "UNVERIFIED"
@@ -159,9 +164,9 @@ def test_curated_classification_suppresses_per_query_and_is_protocol_specific(
 
 def test_not_run_is_blocked_by_existing_public_policy(result: EvaluationResult) -> None:
     service = ExportService(FixtureStore(result), clock=lambda: NOW)  # type: ignore[arg-type]
-    preview = service.preview_run(WORKSPACE_ID, RUN_ID, classification(
-        status=VerificationStatus.NOT_RUN
-    ))
+    preview = service.preview_run(
+        WORKSPACE_ID, RUN_ID, classification(status=VerificationStatus.NOT_RUN)
+    )
     assert not preview.eligible
     assert preview.output_files == []
     assert preview.blocking_reasons == ["PUBLIC_EVIDENCE_POLICY_REJECTED"]
@@ -170,10 +175,12 @@ def test_not_run_is_blocked_by_existing_public_policy(result: EvaluationResult) 
 
 
 @pytest.mark.parametrize(
-    "unsafe_dataset", ["C:\\Users\\private\\file.jsonl", "/home/user/private.jsonl", "api_key: secretvalue"]
+    "unsafe_dataset",
+    ["C:\\Users\\private\\file.jsonl", "/home/user/private.jsonl", "api_key: secretvalue"],
 )
 def test_unsafe_public_metadata_rejected_without_leaking_values(
-    result: EvaluationResult, unsafe_dataset: str,
+    result: EvaluationResult,
+    unsafe_dataset: str,
 ) -> None:
     poisoned = result.model_copy(
         update={"run": result.run.model_copy(update={"dataset_name": unsafe_dataset})}
@@ -188,18 +195,22 @@ def test_unsafe_public_metadata_rejected_without_leaking_values(
 
 def test_only_allowed_data_kinds_and_explicit_owner_status() -> None:
     with pytest.raises(ValidationError):
-        ExportClassification.model_validate({
-            "data_kind": "OFFICIAL_BENCHMARK",
-            "verification_status": "VERIFIED",
-        })
+        ExportClassification.model_validate(
+            {
+                "data_kind": "OFFICIAL_BENCHMARK",
+                "verification_status": "VERIFIED",
+            }
+        )
     with pytest.raises(ValidationError):
         ExportClassification.model_validate({"data_kind": "SYNTHETIC_FIXTURE"})
     with pytest.raises(ValidationError):
-        ExportClassification.model_validate({
-            "data_kind": "SYNTHETIC_FIXTURE",
-            "verification_status": "UNVERIFIED",
-            "claim_scope": "BENCHMARK_RESULT",
-        })
+        ExportClassification.model_validate(
+            {
+                "data_kind": "SYNTHETIC_FIXTURE",
+                "verification_status": "UNVERIFIED",
+                "claim_scope": "BENCHMARK_RESULT",
+            }
+        )
 
 
 def test_preview_is_expiring_and_workspace_scoped(result: EvaluationResult) -> None:
