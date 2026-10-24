@@ -5,9 +5,10 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from evalops.export.models import VerificationStatus
+from evalops.export.policy import safe_public_text
 
 
 class WorkspaceExportDataKind(StrEnum):
@@ -25,6 +26,11 @@ class ExportClassification(BaseModel):
     verification_status: VerificationStatus
     data_kind: WorkspaceExportDataKind
     limitations: list[str] = Field(default_factory=list)
+
+    @field_validator("limitations")
+    @classmethod
+    def validate_limitations(cls, values: list[str]) -> list[str]:
+        return sorted({safe_public_text(value, field="limitation") for value in values})
 
 
 class PreviewFile(BaseModel):
@@ -45,7 +51,7 @@ class ExportPreview(BaseModel):
     schema_version: Literal["workspace-export-preview-v1"] = "workspace-export-preview-v1"
     preview_id: str = Field(pattern=r"^preview-[0-9a-f]{32}$")
     source_type: Literal["run", "comparison"]
-    source_id: str
+    source_id: str = Field(pattern=r"^(?:run|comparison)-[0-9a-f]{32}$")
     eligible: bool
     blocking_reasons: list[str]
     output_files: list[PreviewFile]
