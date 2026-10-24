@@ -182,6 +182,22 @@ def _run_worker(port: int, nonce: str, root: Path) -> None:
             "provenance": (directory / "provenance.json").exists(),
         }
 
+    @app.post("/__test__/exports/tamper-latest-run")
+    async def tamper_latest_run_evidence() -> dict[str, bool]:
+        """Test-only: corrupt a derived newest run, never accept a client path."""
+
+        workspace_id = latest_test_workspace_id()
+        snapshots = store.list_run_snapshots(workspace_id)
+        if not snapshots:
+            return {"tampered": False}
+        run_id = max(snapshots, key=lambda run: run.created_at).run_id
+        path = store._run_config_path(workspace_id, run_id).parent / "result.json"
+        if not path.is_file() or path.is_symlink():
+            return {"tampered": False}
+        with path.open("ab") as output:
+            output.write(b" ")
+        return {"tampered": True}
+
     # Reorder routes so test endpoints match before the catch-all SPA route /{path:path}
     test_routes = [r for r in app.router.routes if getattr(r, "path", "").startswith("/__test__")]
     other_routes = [
