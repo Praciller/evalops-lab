@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:packaged": "playwright test --config=playwright.packaged.config.ts"
   },
   "dependencies": {
     "@evalops/evidence-ui": "file:../../packages/evidence-ui",
