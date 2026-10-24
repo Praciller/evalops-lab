@@ -20,14 +20,14 @@ async function createRun(page: Page, k: number, newerTruth = false): Promise<str
   return runId!;
 }
 
-test("real incompatible k and ground-truth population fail canonical, exploratory never promotes", async ({ page }) => {
+test("real incompatible k and ground-truth population fail canonical, exploratory never promotes", async ({ page }, testInfo) => {
   test.setTimeout(120000);
   const external: string[] = [];
   page.on("request", r => {
     if (!r.url().startsWith(BASE_URL) && !r.url().startsWith("data:")) external.push(r.url());
   });
   await bootstrap(page);
-  const ws = await createWorkspace(page, "Phase 6.3 incompatible E2E");
+  const ws = await createWorkspace(page, `Phase 6.3 incompatible E2E retry ${testInfo.retry}`);
   await uploadJsonl(page, "retrieval_ground_truth", "truth.jsonl", GT_JSONL);
   await uploadJsonl(page, "retrieval_predictions", "predictions.jsonl", PRED_JSONL);
   const baseline = await createRun(page, 10);
