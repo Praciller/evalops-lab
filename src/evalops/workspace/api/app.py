@@ -23,6 +23,7 @@ from evalops.workspace.api.models import (
     WorkspaceNameRequest,
     WorkspaceSummary,
 )
+from evalops.workspace.api.routes_comparisons import register_comparison_routes
 from evalops.workspace.api.routes_inputs import register_input_routes
 from evalops.workspace.api.routes_jobs import register_job_routes
 from evalops.workspace.api.routes_runs import register_run_routes
@@ -37,6 +38,7 @@ from evalops.workspace.security import (
     validate_mutating_origin,
 )
 from evalops.workspace.storage import (
+    UnknownComparisonError,
     UnknownInputError,
     UnknownJobError,
     UnknownRunError,
@@ -124,7 +126,14 @@ def create_workspace_app(
         status_code = (
             404
             if isinstance(
-                error, (UnknownWorkspaceError, UnknownInputError, UnknownRunError, UnknownJobError)
+                error,
+                (
+                    UnknownWorkspaceError,
+                    UnknownInputError,
+                    UnknownRunError,
+                    UnknownJobError,
+                    UnknownComparisonError,
+                ),
             )
             else 500
         )
@@ -204,6 +213,7 @@ def create_workspace_app(
     register_input_routes(app, store, require_read, require_write)
     register_run_routes(app, store, run_service, require_read, require_write)
     register_job_routes(app, store, run_service, require_read, require_write)
+    register_comparison_routes(app, store, require_read, require_write)
 
     if static_dir is not None:
         static_root = static_dir.resolve()

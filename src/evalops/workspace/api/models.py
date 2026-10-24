@@ -7,9 +7,15 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from evalops.workspace.application.runs import RunSnapshot
+from evalops.workspace.comparison.models import (
+    ComparisonCompatibility,
+    ComparisonMode,
+    ComparisonRecord,
+    QueryFailureTransition,
+)
 from evalops.workspace.ingestion.models import InputKind, InputManifest
 from evalops.workspace.jobs.models import JobRecord, JobState, SafeJobError
-from evalops.workspace.models import WorkspaceRecord
+from evalops.workspace.models import BaselinePointer, WorkspaceRecord
 
 
 class StrictModel(BaseModel):
@@ -164,3 +170,32 @@ class JobSummary(StrictModel):
     @classmethod
     def from_record(cls, record: JobRecord) -> JobSummary:
         return cls.model_validate(record.model_dump(mode="python"))
+
+
+class BaselineResponse(StrictModel):
+    baseline: BaselinePointer | None
+
+
+class SetBaselineRequest(StrictModel):
+    run_id: str = Field(pattern=r"^run-[0-9a-f]{32}$")
+    confirm_replace: bool = False
+
+
+class CreateComparisonRequest(StrictModel):
+    candidate_run_id: str = Field(pattern=r"^run-[0-9a-f]{32}$")
+    mode: ComparisonMode = ComparisonMode.CANONICAL
+
+
+class ComparisonListResponse(StrictModel):
+    comparisons: list[ComparisonRecord]
+
+
+class ComparisonConflictResponse(StrictModel):
+    error: ErrorDetail
+    compatibility: ComparisonCompatibility
+
+
+class ComparisonFailuresResponse(StrictModel):
+    comparison_id: str
+    total_count: int
+    transitions: list[QueryFailureTransition]
