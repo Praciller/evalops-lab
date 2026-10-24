@@ -14,6 +14,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -182,6 +183,15 @@ def verify_clean_wheel(wheel: Path) -> dict[str, object]:
         environment.pop("PYTHONHOME", None)
         environment["PYTHONNOUSERSITE"] = "1"
         environment["PYTHONUNBUFFERED"] = "1"
+        # Prove the installed Python runtime is usable without a Node executable
+        # anywhere on its executable search path.
+        scripts_dir = venv_root / ("Scripts" if os.name == "nt" else "bin")
+        node_free_path = str(scripts_dir)
+        if os.name == "nt":
+            node_free_path += os.pathsep + str(Path(os.environ.get("SystemRoot", "C:\\Windows")) / "System32")
+        environment["PATH"] = node_free_path
+        if shutil.which("node", path=node_free_path) is not None:
+            raise RuntimeError("Node is unexpectedly available to clean wheel process")
         venv.EnvBuilder(with_pip=True).create(venv_root)
         python = _python_path(venv_root)
         _run(str(python), "-m", "pip", "install", "--disable-pip-version-check",
