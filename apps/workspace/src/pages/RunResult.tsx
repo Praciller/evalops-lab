@@ -59,7 +59,7 @@ export default function RunResult() {
     if (!run?.result_sha256 || !baselineLoaded || pinning) return;
     const replacing = baseline !== null && baseline.run_id !== run.run_id;
     if (replacing && !window.confirm(
-      "Replace the workspace baseline? Historical comparison records will not change."
+      `Replace the workspace baseline?\nCurrent run: ${baseline.run_id}\nCurrent SHA-256: ${baseline.result_sha256}\nNew run: ${run.run_id}\nNew SHA-256: ${run.result_sha256}\nHistorical comparison records will not change.`
     )) return;
     setPinning(true);
     setPinError(null);
