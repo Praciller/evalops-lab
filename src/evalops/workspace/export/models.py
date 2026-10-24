@@ -38,7 +38,7 @@ class PreviewFile(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    filename: str = Field(pattern=r"^[a-z0-9-]+\.json$")
+    filename: str = Field(pattern=r"^(?:[a-z0-9-]+/)?[a-z0-9-]+\.json$")
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size_bytes: int = Field(ge=0)
 
