@@ -126,7 +126,7 @@ export default function ExportsPage() {
         <p className="eyebrow">STEP 06 · EXPLICIT LOCAL EXPORT</p>
         <h2>Sanitized evidence export</h2>
         <p>
-          Select completed local evidence, inspect exactly what would be included,
+          Select local evidence (completed runs only are eligible), inspect what would be included,
           removed and transformed, then optionally confirm a local write.
         </p>
         <p><strong>Creating sanitized export does not publish to GitHub Pages.</strong></p>
@@ -163,7 +163,7 @@ export default function ExportsPage() {
               >
                 <option value="">Choose evidence</option>
                 {sourceType === "run"
-                  ? runs.filter((run) => run.result_sha256).map((run) => (
+                  ? runs.map((run) => (
                     <option key={run.run_id} value={run.run_id}>{run.run_name} · {run.run_id}</option>
                   ))
                   : comparisons.map((item) => (
