@@ -53,11 +53,7 @@ def stage_assets(source: Path, destination: Path) -> dict[str, str]:
     ):
         raise WorkspaceAssetsError("frontend build is missing index.html or assets")
     entries = [index, *sorted(assets.rglob("*"))]
-    relative_files = [
-        path.relative_to(source).as_posix()
-        for path in entries
-        if path.is_file()
-    ]
+    relative_files = [path.relative_to(source).as_posix() for path in entries if path.is_file()]
     if len(relative_files) < 2 or len(relative_files) != len(set(relative_files)):
         raise WorkspaceAssetsError("frontend build contains no usable assets")
     for path in entries:
@@ -65,9 +61,8 @@ def stage_assets(source: Path, destination: Path) -> dict[str, str]:
             raise WorkspaceAssetsError("frontend build contains a symlink")
         if path.is_file():
             relative = path.relative_to(source).as_posix()
-            if (
-                relative != "index.html"
-                and (not relative.startswith("assets/") or relative.endswith(".map"))
+            if relative != "index.html" and (
+                not relative.startswith("assets/") or relative.endswith(".map")
             ):
                 raise WorkspaceAssetsError("frontend build contains unsupported files")
             if relative.endswith(".css") and re.search(
@@ -82,7 +77,9 @@ def stage_assets(source: Path, destination: Path) -> dict[str, str]:
         verify_staged_workspace_assets(destination)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".evalops-static-stage-", dir=destination.parent) as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix=".evalops-static-stage-", dir=destination.parent
+    ) as tmp:
         staging = Path(tmp) / "static"
         staging.mkdir()
         digest_map: dict[str, str] = {}

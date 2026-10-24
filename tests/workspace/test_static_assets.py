@@ -55,9 +55,7 @@ def test_resolver_prefers_verified_stage_over_source_checkout(tmp_path: Path) ->
     (source / "pyproject.toml").write_text("[build-system]", encoding="utf-8")
     package = tmp_path / "package" / "static"
     stage_assets(dist, package)
-    assert resolve_workspace_static_dir(
-        package_dir=package, checkout_root=source
-    ) == package
+    assert resolve_workspace_static_dir(package_dir=package, checkout_root=source) == package
 
 
 def test_resolver_allows_source_build_only_for_real_checkout(tmp_path: Path) -> None:
@@ -65,9 +63,7 @@ def test_resolver_allows_source_build_only_for_real_checkout(tmp_path: Path) -> 
     checkout = dist.parents[2]
     (checkout / "pyproject.toml").write_text("[build-system]", encoding="utf-8")
     missing_package = tmp_path / "no-package"
-    assert resolve_workspace_static_dir(
-        package_dir=missing_package, checkout_root=checkout
-    ) == dist
+    assert resolve_workspace_static_dir(package_dir=missing_package, checkout_root=checkout) == dist
     (checkout / "pyproject.toml").unlink()
     with pytest.raises(WorkspaceAssetsError, match="unavailable"):
         resolve_workspace_static_dir(package_dir=missing_package, checkout_root=checkout)
@@ -120,7 +116,8 @@ def test_stage_missing_vite_entrypoint_and_assets_rejected(tmp_path: Path) -> No
     ],
 )
 def test_external_or_missing_entrypoint_resources_rejected(
-    tmp_path: Path, external: str,
+    tmp_path: Path,
+    external: str,
 ) -> None:
     dist = _vite_fixture(tmp_path)
     (dist / "index.html").write_text("<html>" + external + "</html>", encoding="utf-8")

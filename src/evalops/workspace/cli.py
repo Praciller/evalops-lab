@@ -15,6 +15,7 @@ def run_workspace_command(*, root: Path | None, port: int | None, open_browser: 
     installations retain their existing import and CLI paths.
     """
 
+    import fastapi  # noqa: F401 -- explicit optional dependency check even if cached
     import uvicorn
 
     from evalops.workspace.api.app import create_workspace_app
