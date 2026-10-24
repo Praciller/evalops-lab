@@ -114,9 +114,9 @@ class RunningWorkspace:
         while time.monotonic() < deadline:
             try:
                 line = self.output.get(timeout=0.5).strip()
-            except queue.Empty:
+            except queue.Empty as error:
                 if self.process.poll() is not None:
-                    raise RuntimeError("installed Workspace exited before bootstrap")
+                    raise RuntimeError("installed Workspace exited before bootstrap") from error
                 continue
             match = re.fullmatch(re.escape(self.base) + r"/#bootstrap=([A-Za-z0-9_-]+)", line)
             if match:
