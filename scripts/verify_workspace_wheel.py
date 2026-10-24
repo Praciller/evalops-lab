@@ -170,7 +170,7 @@ def _health(opener: urllib.request.OpenerDirector, base: str) -> None:
     raise RuntimeError("installed Workspace loopback server did not become healthy")
 
 
-def verify_clean_wheel(wheel: Path) -> dict[str, object]:
+def verify_clean_wheel(wheel: Path, *, browser: bool = False) -> dict[str, object]:
     hashes = inspect_wheel(wheel)
     with tempfile.TemporaryDirectory(prefix="evalops-clean-wheel-") as temp:
         root = Path(temp)
@@ -264,6 +264,36 @@ def verify_clean_wheel(wheel: Path) -> dict[str, object]:
         finally:
             second.close()
 
+        if browser:
+            # Browser driver uses Node in the source checkout, while its target
+            # server is the isolated installed Python process with Node removed
+            # from PATH. The driver does not expose any source files to server.
+            npm = shutil.which("npm")
+            if npm is None:
+                raise RuntimeError("packaged browser driver requires npm")
+            browser_data = root / "browser-only-data"
+            destination = root / "browser-export"
+            destination.mkdir()
+            installed = RunningWorkspace(python, outside, browser_data, environment)
+            try:
+                _health(urllib.request.build_opener(), installed.base)
+                driver_env = os.environ.copy()
+                driver_env["EVALOPS_PACKAGED_BOOTSTRAP_URL"] = (
+                    installed.base + "/#bootstrap=" + installed.nonce
+                )
+                driver_env["EVALOPS_PACKAGED_EXPORT_DIR"] = str(destination)
+                checkout = Path(__file__).resolve().parents[1] / "apps" / "workspace"
+                outcome = subprocess.run(
+                    [npm, "run", "test:e2e:packaged"],
+                    cwd=checkout, env=driver_env, check=False, timeout=210,
+                )
+                if outcome.returncode:
+                    raise RuntimeError("installed-wheel Playwright browser check failed")
+                if len(list(destination.glob("*.json"))) != 1:
+                    raise RuntimeError("packaged browser did not export exactly one JSON file")
+            finally:
+                installed.close()
+
     return {
         "wheel_verified": True,
         "static_asset_count": len(hashes),
@@ -272,17 +302,19 @@ def verify_clean_wheel(wheel: Path) -> dict[str, object]:
         "fresh_sessions": True,
         "persistent_local_metadata": True,
         "no_node_runtime_invocation": True,
+        "packaged_browser": browser,
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify an EvalOps wheel installed outside source")
     parser.add_argument("wheel", type=Path)
+    parser.add_argument("--browser", action="store_true", help="Run installed-wheel Playwright")
     args = parser.parse_args()
     try:
         if not args.wheel.is_file():
             raise RuntimeError("specified wheel does not exist")
-        result = verify_clean_wheel(args.wheel)
+        result = verify_clean_wheel(args.wheel, browser=args.browser)
     except (OSError, ValueError, RuntimeError, zipfile.BadZipFile) as error:
         print("Wheel verification failed: " + str(error), file=sys.stderr)
         return 1
