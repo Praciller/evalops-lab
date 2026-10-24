@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import sys
 import webbrowser
 from pathlib import Path
 
@@ -14,6 +15,7 @@ def run_workspace_command(*, root: Path | None, port: int | None, open_browser: 
     installations retain their existing import and CLI paths.
     """
 
+    import fastapi  # noqa: F401 -- explicit optional dependency check even if cached
     import uvicorn
 
     from evalops.workspace.api.app import create_workspace_app
@@ -25,12 +27,22 @@ def run_workspace_command(*, root: Path | None, port: int | None, open_browser: 
     origin = WorkspaceOrigin(host="127.0.0.1", port=selected_port)
     session_manager = BootstrapSessionManager()
     store = WorkspaceStore(selected_root)
-    static_dir = Path(__file__).resolve().parents[3] / "apps" / "workspace" / "dist"
+    from evalops.workspace.assets import WorkspaceAssetsError, resolve_workspace_static_dir
+
+    try:
+        static_dir = resolve_workspace_static_dir()
+    except WorkspaceAssetsError:
+        print(
+            "Local Workspace UI assets are unavailable or invalid. "
+            "Build apps/workspace and run scripts/stage_workspace_assets.py before packaging.",
+            file=sys.stderr,
+        )
+        return 2
     app = create_workspace_app(
         store,
         session_manager,
         origin,
-        static_dir=static_dir if static_dir.is_dir() else None,
+        static_dir=static_dir,
     )
     bootstrap_url = f"{origin.http_origin}/#bootstrap={session_manager.bootstrap_nonce}"
     if open_browser:
