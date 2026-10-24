@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -43,14 +44,13 @@ from evalops.workspace.comparison.policy import build_workspace_retrieval_rules
 from evalops.workspace.export.models import (
     ConfirmExportRequest,
     ExportClassification,
-    ExportManifest,
     ExportedFile,
+    ExportManifest,
     ExportPreview,
     PreviewFile,
     WorkspaceExportDataKind,
 )
 from evalops.workspace.storage import WorkspaceStorageError, WorkspaceStore
-
 
 
 def _explicit_destination(raw_path: str) -> Path:
@@ -87,7 +87,11 @@ def _exclusive_directory_commit(staged: Path, target: Path) -> None:
         if renameat2 is None:
             raise OSError(errno.ENOTSUP, "exclusive directory rename unavailable")
         renameat2.argtypes = [
-            ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
         ]
         renameat2.restype = ctypes.c_int
         at_fdcwd = -100
@@ -107,11 +111,7 @@ def _write_export_files(destination: Path, files: Mapping[str, bytes]) -> Path:
 
     if len(files) == 1:
         filename, content = next(iter(files.items()))
-        if (
-            "/" in filename
-            or "\\" in filename
-            or not re.fullmatch(r"[a-z0-9-]+\.json", filename)
-        ):
+        if "/" in filename or "\\" in filename or not re.fullmatch(r"[a-z0-9-]+\.json", filename):
             raise ValueError("invalid run export filename")
         target = destination / filename
         if target.exists() or target.is_symlink():
@@ -159,6 +159,7 @@ def _write_export_files(destination: Path, files: Mapping[str, bytes]) -> Path:
             shutil.rmtree(staged)
     return target
 
+
 PREVIEW_LIFETIME = timedelta(minutes=15)
 _RUN_ID = re.compile(r"^run-[0-9a-f]{32}$")
 _COMPARISON_ID = re.compile(r"^comparison-[0-9a-f]{32}$")
@@ -179,7 +180,7 @@ _TRANSFORMED = [
 class _PreparedExport:
     workspace_id: str
     expires_at: datetime
-    source_type: str
+    source_type: Literal["run", "comparison"]
     source_id: str
     classification: ExportClassification
     files: Mapping[str, bytes]
@@ -488,10 +489,7 @@ class ExportService:
             expires_at=expires_at,
         )
 
-
-    def confirm(
-        self, workspace_id: str, request: ConfirmExportRequest
-    ) -> ExportManifest:
+    def confirm(self, workspace_id: str, request: ConfirmExportRequest) -> ExportManifest:
         """Commit an exact previously previewed snapshot, never auto-publish.
 
         This is a second explicit owner action. A fresh sanitized preview must
@@ -520,11 +518,7 @@ class ExportService:
                 raise ValueError("unsupported export source")
             try:
                 fresh = self._prepared.get(rechecked.preview_id)
-                if (
-                    not rechecked.eligible
-                    or fresh is None
-                    or fresh.files != prepared.files
-                ):
+                if not rechecked.eligible or fresh is None or fresh.files != prepared.files:
                     raise ValueError("source changed since export preview")
             finally:
                 self._prepared.pop(rechecked.preview_id, None)
