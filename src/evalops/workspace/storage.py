@@ -264,6 +264,27 @@ class WorkspaceStore:
     def _workspace_state_path(self, workspace_id: str) -> Path:
         return self._workspace_path(workspace_id).with_name("workspace-state.json")
 
+    def save_export_manifest(
+        self, workspace_id: str, export_id: str, payload: Mapping[str, object]
+    ) -> None:
+        """Record a completed explicit export privately; never overwrite history."""
+
+        self.get_workspace(workspace_id)
+        if not re.fullmatch(r"export-[0-9a-f]{32}", export_id):
+            raise WorkspaceStorageError("invalid export manifest identifier")
+        base = (self._workspaces_path / workspace_id).resolve(strict=True)
+        if not base.is_relative_to(self._workspaces_path.resolve(strict=True)):
+            raise WorkspaceStorageError("unsafe export manifest directory")
+        exports = base / "exports"
+        manifests = exports / "manifests"
+        if exports.is_symlink() or manifests.is_symlink():
+            raise WorkspaceStorageError("unsafe export manifest directory")
+        manifests.mkdir(parents=True, exist_ok=True)
+        path = manifests / f"{export_id}.json"
+        if path.is_symlink() or path.exists():
+            raise WorkspaceStorageError("export manifest already exists")
+        _atomic_create_json(path, payload)
+
     def list_inputs(self, workspace_id: str) -> list[InputManifest]:
         self.get_workspace(workspace_id)
         directory = self._input_section(workspace_id, "manifests")
