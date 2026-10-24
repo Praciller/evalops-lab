@@ -102,7 +102,11 @@ export default function ExportsPage() {
     try {
       const completed = await confirmExport(workspaceId, preview.preview_id, directory);
       setManifest(completed);
-      setHistory(await listExports(workspaceId));
+      try {
+        setHistory(await listExports(workspaceId));
+      } catch {
+        setError("Local export completed, but private history could not be refreshed.");
+      }
     } catch (reason) {
       setError(safeError(reason, "Local export could not be confirmed."));
       if (
