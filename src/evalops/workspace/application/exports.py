@@ -488,6 +488,78 @@ class ExportService:
             expires_at=expires_at,
         )
 
+
+    def confirm(
+        self, workspace_id: str, request: ConfirmExportRequest
+    ) -> ExportManifest:
+        """Commit an exact previously previewed snapshot, never auto-publish.
+
+        This is a second explicit owner action. A fresh sanitized preview must
+        match the exact cached bytes; any changed source is rejected.
+        """
+
+        with self._lock:
+            now = self._clock()
+            if now.tzinfo is None:
+                raise ValueError("confirmation clock must be timezone-aware")
+            self._purge_expired(now)
+            prepared = self._prepared.get(request.preview_id)
+            if prepared is None or prepared.workspace_id != workspace_id:
+                raise LookupError("export preview is unavailable or expired")
+
+            # Compare to a freshly verified source, not just the cached JSON.
+            if prepared.source_type == "run":
+                rechecked = self.preview_run(
+                    workspace_id, prepared.source_id, prepared.classification
+                )
+            elif prepared.source_type == "comparison":
+                rechecked = self.preview_comparison(
+                    workspace_id, prepared.source_id, prepared.classification
+                )
+            else:
+                raise ValueError("unsupported export source")
+            try:
+                fresh = self._prepared.get(rechecked.preview_id)
+                if (
+                    not rechecked.eligible
+                    or fresh is None
+                    or fresh.files != prepared.files
+                ):
+                    raise ValueError("source changed since export preview")
+            finally:
+                self._prepared.pop(rechecked.preview_id, None)
+
+            destination = _explicit_destination(request.destination_directory)
+            try:
+                target = _write_export_files(destination, prepared.files)
+            except FileExistsError as error:
+                raise ValueError("export destination already exists") from error
+
+            files = [
+                ExportedFile(
+                    filename=name,
+                    sha256=hashlib.sha256(contents).hexdigest(),
+                    size_bytes=len(contents),
+                )
+                for name, contents in prepared.files.items()
+            ]
+            manifest = ExportManifest(
+                export_id=f"export-{uuid.uuid4().hex}",
+                source_type=prepared.source_type,
+                source_id=prepared.source_id,
+                destination=str(target),
+                files=files,
+                classification=prepared.classification,
+                created_at=now,
+            )
+            # Private history records only completed destination writes. If
+            # persistence fails, do not delete or overwrite user-owned output.
+            self._store.save_export_manifest(
+                workspace_id, manifest.export_id, manifest.model_dump(mode="json")
+            )
+            self._prepared.pop(request.preview_id, None)
+            return manifest
+
     def get_prepared_files(self, workspace_id: str, preview_id: str) -> dict[str, bytes]:
         """Internal, owner-scoped copy for the later explicit confirmation use-case.
 
