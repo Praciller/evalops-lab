@@ -60,12 +60,6 @@ jobs:
         run: npm run build
       - name: OpenAPI schema check
         run: python scripts/export_workspace_openapi.py --check
-      - name: Install Playwright Chromium
-        working-directory: apps/workspace
-        run: npx playwright install --with-deps chromium
-      - name: Playwright E2E tests
-        working-directory: apps/workspace
-        run: npm run test:e2e
       - name: Stage checked frontend assets into Python package
         run: python scripts/stage_workspace_assets.py
       - name: Build release-candidate wheel without publishing
@@ -81,6 +75,12 @@ jobs:
           wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
           test -n "$wheel"
           EVALOPS_WHEEL_PATH="$wheel" python -m pytest tests/workspace/test_package_smoke.py -q
+      - name: Install Playwright Chromium
+        working-directory: apps/workspace
+        run: npx playwright install --with-deps chromium
+      - name: Playwright E2E tests
+        working-directory: apps/workspace
+        run: npm run test:e2e
       - name: Verify fresh wheel installation, loopback runtime, browser flow and restart
         run: |
           wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
