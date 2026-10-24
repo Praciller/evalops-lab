@@ -140,7 +140,7 @@ describe("private Failure Explorer", () => {
     await waitFor(() => expect(api.listComparisonFailures).toHaveBeenLastCalledWith(
       WS, ID, expect.objectContaining({ transition: "REGRESSED" })
     ));
-    expect(screen.getByText("RETRIEVAL_MISS")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "RETRIEVAL_MISS" })).toBeInTheDocument();
     expect(screen.queryByText("Public verified evidence")).not.toBeInTheDocument();
   });
 
