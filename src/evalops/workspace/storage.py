@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from evalops.workspace.comparison.models import ComparisonRecord
+from evalops.workspace.comparison.models import ComparisonFailureArtifact, ComparisonRecord
 from evalops.workspace.ingestion.models import (
     MAX_INPUT_BYTES,
     InputKind,
@@ -563,15 +563,30 @@ class WorkspaceStore:
             raise WorkspaceStorageError("comparison directory is unsafe")
         return directory
 
-    def save_comparison_record(self, workspace_id: str, record: ComparisonRecord) -> None:
-        """Create the private immutable result and checksum-bound identity manifest."""
+    def save_comparison_record(
+        self,
+        workspace_id: str,
+        record: ComparisonRecord,
+        *,
+        failure_artifact: ComparisonFailureArtifact | None = None,
+    ) -> None:
+        """Create private immutable result and optional checksum-bound failures."""
 
         with self._job_lock:
             if not isinstance(record, ComparisonRecord) or record.workspace_id != workspace_id:
                 raise WorkspaceStorageError("comparison ownership is invalid")
+            if failure_artifact is not None and (
+                not isinstance(failure_artifact, ComparisonFailureArtifact)
+                or failure_artifact.comparison_id != record.comparison_id
+            ):
+                raise WorkspaceStorageError("comparison failure identity is invalid")
             directory = self._comparison_directory(workspace_id, record.comparison_id)
             config_path, result_path = directory / "config.json", directory / "result.json"
-            if any(path.exists() or path.is_symlink() for path in (config_path, result_path)):
+            failures_path = directory / "failures.json"
+            if any(
+                path.exists() or path.is_symlink()
+                for path in (config_path, result_path, failures_path)
+            ):
                 raise WorkspaceStorageError("immutable comparison already exists")
             result_bytes = (
                 json.dumps(
@@ -591,14 +606,33 @@ class WorkspaceStore:
                 "policy_version": record.policy_version,
                 "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
             }
-            created_result = False
+            failure_bytes = None
+            if failure_artifact is not None:
+                failure_bytes = (
+                    json.dumps(
+                        failure_artifact.model_dump(mode="json"),
+                        ensure_ascii=False,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n"
+                ).encode("utf-8")
+                config["failures_sha256"] = hashlib.sha256(failure_bytes).hexdigest()
+            created: list[Path] = []
             try:
                 _atomic_create_bytes(result_path, result_bytes)
-                created_result = True
+                created.append(result_path)
+                if failure_bytes is not None:
+                    _atomic_create_bytes(failures_path, failure_bytes)
+                    created.append(failures_path)
                 _atomic_create_json(config_path, config)
             except Exception:
-                if created_result:
-                    result_path.unlink(missing_ok=True)
+                for created_path in reversed(created):
+                    created_path.unlink(missing_ok=True)
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
                 raise
 
     def get_comparison_record(self, workspace_id: str, comparison_id: str) -> ComparisonRecord:
@@ -634,6 +668,34 @@ class WorkspaceStore:
         ):
             raise WorkspaceStorageError("comparison identity or metadata is invalid")
         return record
+
+    def get_comparison_failures(
+        self, workspace_id: str, comparison_id: str
+    ) -> ComparisonFailureArtifact:
+        """Require complete checksum-bound private per-query evidence; no fake empty list."""
+
+        self.get_comparison_record(workspace_id, comparison_id)
+        directory = self._comparison_directory(workspace_id, comparison_id)
+        config = _read_json(directory / "config.json")
+        expected_sha = config.get("failures_sha256")
+        if not isinstance(expected_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+            raise WorkspaceStorageError("comparison failure evidence is unavailable")
+        path = directory / "failures.json"
+        if path.is_symlink() or not path.is_file():
+            raise WorkspaceStorageError("comparison failure evidence is unavailable")
+        try:
+            payload = path.read_bytes()
+            if hashlib.sha256(payload).hexdigest() != expected_sha:
+                raise WorkspaceStorageError("comparison failure checksum mismatch")
+            failure_artifact = ComparisonFailureArtifact.model_validate_json(payload)
+        except (OSError, ValueError, ValidationError) as error:
+            raise WorkspaceStorageError("comparison failure evidence is invalid") from error
+        if failure_artifact.comparison_id != comparison_id:
+            raise WorkspaceStorageError("comparison failure identity mismatch")
+        identifiers = [row.query_id for row in failure_artifact.transitions]
+        if not identifiers or identifiers != sorted(set(identifiers)):
+            raise WorkspaceStorageError("comparison failure query identities are invalid")
+        return failure_artifact
 
     def list_comparison_records(self, workspace_id: str) -> list[ComparisonRecord]:
         directory = self._comparisons_directory(workspace_id)
