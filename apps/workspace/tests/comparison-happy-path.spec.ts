@@ -9,7 +9,7 @@ const BASE_PRED =
   '{"query_id":"q2","retrieved_document_ids":["missing"]}\n';
 const CAND_PRED =
   '{"query_id":"q1","retrieved_document_ids":["missing"]}\n' +
-  '{"query_id":"q2","retrieved_document_ids":["d2","d4"]}\n';
+  '{"query_id":"q2","retrieved_document_ids":["missing","d2"]}\n';
 
 async function evaluate(page: Page, k: number, selectLatestPrediction = false): Promise<string> {
   await page.getByRole("link", { name: "Runs", exact: true }).click();
@@ -30,7 +30,7 @@ async function evaluate(page: Page, k: number, selectLatestPrediction = false): 
   return id!;
 }
 
-test("real compatible baseline and candidate keep immutable comparisons and private failure transitions", async ({ page }) => {
+test("real compatible baseline and candidate keep immutable comparisons and private failure transitions", async ({ page }, testInfo) => {
   test.setTimeout(180000);
   const external: string[] = [];
   page.on("request", request => {
@@ -40,7 +40,7 @@ test("real compatible baseline and candidate keep immutable comparisons and priv
   });
 
   await bootstrap(page);
-  const ws = await createWorkspace(page, "Phase 6.3 compatible E2E");
+  const ws = await createWorkspace(page, `Phase 6.3 compatible E2E retry ${testInfo.retry}`);
   await uploadJsonl(page, "retrieval_ground_truth", "truth.jsonl", GT_JSONL);
   await uploadJsonl(page, "retrieval_predictions", "baseline.jsonl", BASE_PRED);
   const baselineId = await evaluate(page, 2);
