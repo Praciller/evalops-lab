@@ -60,3 +60,31 @@ class ExportPreview(BaseModel):
     transformed: list[str]
     classification: ExportClassification
     expires_at: AwareDatetime
+
+
+class ConfirmExportRequest(BaseModel):
+    """Second explicit owner action; destination is never inferred."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    preview_id: str = Field(pattern=r"^preview-[0-9a-f]{32}$")
+    destination_directory: str = Field(min_length=1, max_length=4096)
+
+
+class ExportedFile(PreviewFile):
+    """One confirmed output with its exact canonical digest."""
+
+
+class ExportManifest(BaseModel):
+    """Private history only; never included in public export artifacts."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["workspace-export-manifest-v1"] = "workspace-export-manifest-v1"
+    export_id: str = Field(pattern=r"^export-[0-9a-f]{32}$")
+    source_type: Literal["run", "comparison"]
+    source_id: str = Field(pattern=r"^(?:run|comparison)-[0-9a-f]{32}$")
+    destination: str
+    files: list[ExportedFile]
+    classification: ExportClassification
+    created_at: AwareDatetime
