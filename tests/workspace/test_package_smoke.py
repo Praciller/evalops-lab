@@ -16,7 +16,7 @@ PREFIX = "evalops/workspace/static/"
 
 def _wheel(
     path: Path, *, tampered: bool = False, source_map: bool = False,
-    omit_index: bool = False
+    omit_index: bool = False, bad_schema: bool = False
 ) -> Path:
     outputs = {
         "index.html": b'<html><script src="/assets/app.js"></script></html>',
@@ -25,7 +25,7 @@ def _wheel(
     if source_map:
         outputs["assets/app.js.map"] = b"unwanted source map"
     manifest = {
-        "schema_version": "workspace-static-assets-v1",
+        "schema_version": "unknown" if bad_schema else "workspace-static-assets-v1",
         "files": {name: hashlib.sha256(raw).hexdigest() for name, raw in sorted(outputs.items())},
     }
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -62,8 +62,6 @@ def test_wheel_rejects_tampered_or_missing_assets(tmp_path: Path, variant: str) 
 
 
 def test_wheel_rejects_wrong_version(tmp_path: Path) -> None:
-    wheel = _wheel(tmp_path / "invalid.whl")
-    with zipfile.ZipFile(wheel, "a") as archive:
-        archive.writestr(PREFIX + "assets-manifest.json", '{"schema_version":"unknown","files":{}}')
+    wheel = _wheel(tmp_path / "invalid.whl", bad_schema=True)
     with pytest.raises(RuntimeError):
         inspect_wheel(wheel)
