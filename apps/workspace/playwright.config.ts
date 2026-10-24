@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  testIgnore: ["**/packaged-workspace.spec.ts"],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -16,8 +17,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  // Playwright E2E requires the server to already be running
-  // (started by scripts/run_workspace_e2e_server.py)
+  // Source-checkout E2E uses the test-only server harness, never the packaged wheel.
   webServer: {
     command: `python ${process.cwd().replace(/\\/g, '/')}/../../scripts/run_workspace_e2e_server.py --port 18234 --nonce e2e-test-nonce`,
     url: "http://127.0.0.1:18234",
