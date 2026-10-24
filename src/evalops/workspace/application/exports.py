@@ -7,6 +7,7 @@ existing Public Evidence Contract V1 adapter, models and serializer.
 from __future__ import annotations
 
 import hashlib
+import re
 import threading
 import uuid
 from collections.abc import Callable, Mapping
@@ -27,6 +28,7 @@ from evalops.workspace.export.models import (
 from evalops.workspace.storage import WorkspaceStorageError, WorkspaceStore
 
 PREVIEW_LIFETIME = timedelta(minutes=15)
+_RUN_ID = re.compile(r"^run-[0-9a-f]{32}$")
 
 # Disclose the actual allowlist boundary rather than claiming to clean raw files.
 _EXCLUDED = [
@@ -70,6 +72,8 @@ class ExportService:
     ) -> ExportPreview:
         """Return safe disclosure and manifest; never expose sanitized bytes yet."""
 
+        if not _RUN_ID.fullmatch(run_id):
+            raise ValueError("invalid run identifier")
         now = self._clock()
         if now.tzinfo is None:
             raise ValueError("preview clock must be timezone-aware")
