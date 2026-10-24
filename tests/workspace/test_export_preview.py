@@ -235,3 +235,19 @@ def test_storage_failure_returns_safe_block_without_preparing(
     assert "/private/path" not in preview.model_dump_json()
     with pytest.raises(LookupError):
         service.get_prepared_files(WORKSPACE_ID, preview.preview_id)
+
+
+def test_malicious_owner_limitations_are_rejected_before_preview() -> None:
+    for value in ("api_key: should-not-leak", "C:\\private\\data.csv", "/etc/secrets"):
+        with pytest.raises(ValidationError):
+            ExportClassification(
+                verification_status=VerificationStatus.UNVERIFIED,
+                data_kind=WorkspaceExportDataKind.SYNTHETIC_FIXTURE,
+                limitations=[value],
+            )
+
+
+def test_preview_refuses_untrusted_source_identifier(result: EvaluationResult) -> None:
+    service = ExportService(FixtureStore(result), clock=lambda: NOW)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="invalid run identifier"):
+        service.preview_run(WORKSPACE_ID, "C:\\private\\run.json", classification())
