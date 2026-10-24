@@ -12,6 +12,7 @@ import re
 import sys
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_PREFIX = "evalops/workspace/static/"
@@ -67,7 +68,10 @@ def scan_content(name: str, content: bytes) -> None:
         if name.endswith((".html", ".css")) or not any(
             url.startswith(prefix) for prefix in _INERT_URL_PREFIXES
         ):
-            raise RuntimeBoundaryError("external URL reference in runtime asset")
+            safe_host = re.sub(r"[^a-z0-9.-]", "", urlsplit(url).hostname or "invalid")[:80]
+            raise RuntimeBoundaryError(
+                f"external URL host {safe_host} in runtime asset {Path(name).name}"
+            )
 
 
 def read_dist(root: Path) -> dict[str, bytes]:
