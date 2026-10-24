@@ -3,13 +3,12 @@ import {
   BASE_URL, GT_JSONL, PRED_JSONL, bootstrap, createWorkspace, uploadJsonl,
 } from "./retrieval-helpers";
 
-async function createRun(page: Page, k: number, newerTruth = false): Promise<string> {
+async function createRun(page: Page, k: number, groundTruthInputId?: string): Promise<string> {
   await page.getByRole("link", { name: "Runs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Configure & review a run" })).toBeVisible();
   await page.locator("#top-k").fill(String(k));
-  if (newerTruth) {
-    const options = await page.locator("#truth-select option").count();
-    await page.locator("#truth-select").selectOption({ index: options - 1 });
+  if (groundTruthInputId) {
+    await page.locator("#truth-select").selectOption(groundTruthInputId);
   }
   await page.getByRole("button", { name: "Validate & review" }).click();
   await page.getByRole("button", { name: "Run Evaluation" }).click();
@@ -57,8 +56,14 @@ test("real incompatible k and ground-truth population fail canonical, explorator
   const changedTruth =
     '{"query_id":"q1","relevant_document_ids":["modified-relevance"]}\n' +
     '{"query_id":"q2","relevant_document_ids":["d2"]}\n';
+  const changedTruthResponse = page.waitForResponse(response =>
+    response.request().method() === "POST" &&
+    response.url().endsWith(`/workspaces/${ws}/inputs/upload`) && response.ok()
+  );
   await uploadJsonl(page, "retrieval_ground_truth", "changed-truth.jsonl", changedTruth);
-  const changed = await createRun(page, 10, true);
+  const registeredTruth = await (await changedTruthResponse).json() as { input_id: string };
+  expect(registeredTruth.input_id).toMatch(/^input-[0-9a-f]{32}$/);
+  const changed = await createRun(page, 10, registeredTruth.input_id);
   await page.getByRole("link", { name: "Comparisons", exact: true }).click();
   await page.getByLabel("Completed candidate run").selectOption(changed);
   await page.getByRole("button", { name: "Check & create canonical comparison" }).click();
