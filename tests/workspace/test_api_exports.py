@@ -301,6 +301,29 @@ def test_expiry_source_drift_conflict_and_existing_target_safe_errors(
         monkeypatch.setattr(export_module, "PREVIEW_LIFETIME", original_lifetime)
 
 
+def test_expired_valid_preview_rejects_confirmation_without_files(
+    app_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _, ws, destination, _ = app_context
+    run = _run(client, ws, GOOD)
+    monkeypatch.setattr(export_module, "PREVIEW_LIFETIME", timedelta(minutes=-1))
+    stale = _preview(client, ws, run)
+    assert stale.status_code == 200
+    assert stale.json()["eligible"] is True
+    response = client.post(
+        f"/api/v1/workspaces/{ws}/exports/confirm",
+        headers=HEADERS,
+        json={
+            "preview_id": stale.json()["preview_id"],
+            "destination_directory": str(destination),
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "export_preview_expired"
+    assert list(destination.iterdir()) == []
+
+
 def test_explicit_directory_validation_and_destination_collision(app_context) -> None:
     client, _, ws, destination, _ = app_context
     run = _run(client, ws, GOOD)
