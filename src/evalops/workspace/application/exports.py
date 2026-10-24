@@ -180,7 +180,6 @@ class ExportService:
             expires_at=expires_at,
         )
 
-
     def preview_comparison(
         self, workspace_id: str, comparison_id: str, classification: ExportClassification
     ) -> ExportPreview:
@@ -243,9 +242,7 @@ class ExportService:
                 return blocked("SOURCE_EVIDENCE_UNAVAILABLE_OR_INVALID")
 
             base_snapshot = self._store.get_run_snapshot(workspace_id, record.baseline_run_id)
-            candidate_snapshot = self._store.get_run_snapshot(
-                workspace_id, record.candidate_run_id
-            )
+            candidate_snapshot = self._store.get_run_snapshot(workspace_id, record.candidate_run_id)
             assessed = assess_local_retrieval_compatibility(
                 base_snapshot,
                 base,
@@ -310,9 +307,15 @@ class ExportService:
             )
             index = build_public_index([base_public, candidate_public, comparison_public])
             serialized = {
-                f"{artifact_id}/baseline.json": serialize_public_artifact(base_public).encode("utf-8"),
-                f"{artifact_id}/candidate.json": serialize_public_artifact(candidate_public).encode("utf-8"),
-                f"{artifact_id}/comparison.json": serialize_public_artifact(comparison_public).encode("utf-8"),
+                f"{artifact_id}/baseline.json": serialize_public_artifact(base_public).encode(
+                    "utf-8"
+                ),
+                f"{artifact_id}/candidate.json": serialize_public_artifact(candidate_public).encode(
+                    "utf-8"
+                ),
+                f"{artifact_id}/comparison.json": serialize_public_artifact(
+                    comparison_public
+                ).encode("utf-8"),
                 f"{artifact_id}/index.json": serialize_public_artifact(index).encode("utf-8"),
             }
         except (ValueError, ValidationError):
