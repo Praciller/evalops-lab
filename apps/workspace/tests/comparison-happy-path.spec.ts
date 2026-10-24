@@ -89,7 +89,7 @@ test("real compatible baseline and candidate keep immutable comparisons and priv
   await expect(page.getByRole("heading", { name: "Query-level transitions" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "REGRESSED" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "IMPROVED" })).toBeVisible();
-  await page.getByLabel("Transition").selectOption("REGRESSED");
+  await page.getByLabel("Transition", { exact: true }).selectOption("REGRESSED");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page.getByRole("rowheader", { name: "q1" })).toBeVisible();
   await expect(page.getByRole("rowheader", { name: "q2" })).toHaveCount(0);
