@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getRun } from "../api/client";
-import { RunSummary } from "../api/schemas";
+import { getBaseline, getRun, setBaseline } from "../api/client";
+import { BaselinePointer, RunSummary } from "../api/schemas";
 
 const LABELS: Record<string, string> = {
   mrr: "Mean reciprocal rank",
@@ -25,6 +25,11 @@ export default function RunResult() {
   const [run, setRun] = useState<RunSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [baseline, setPinnedBaseline] = useState<BaselinePointer | null>(null);
+  const [baselineLoaded, setBaselineLoaded] = useState(false);
+  const [pinning, setPinning] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSuccess, setPinSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -38,6 +43,37 @@ export default function RunResult() {
     });
     return () => { live = false; };
   }, [workspaceId, runId]);
+
+  useEffect(() => {
+    let live = true;
+    setBaselineLoaded(false);
+    getBaseline(workspaceId).then((pointer) => {
+      if (live) { setPinnedBaseline(pointer); setBaselineLoaded(true); }
+    }).catch(() => {
+      if (live) { setPinError("Could not verify pinned baseline."); setBaselineLoaded(false); }
+    });
+    return () => { live = false; };
+  }, [workspaceId]);
+
+  async function pinRun() {
+    if (!run?.result_sha256 || !baselineLoaded || pinning) return;
+    const replacing = baseline !== null && baseline.run_id !== run.run_id;
+    if (replacing && !window.confirm(
+      `Replace the workspace baseline?\nCurrent run: ${baseline.run_id}\nCurrent SHA-256: ${baseline.result_sha256}\nNew run: ${run.run_id}\nNew SHA-256: ${run.result_sha256}\nHistorical comparison records will not change.`
+    )) return;
+    setPinning(true);
+    setPinError(null);
+    setPinSuccess(null);
+    try {
+      const pointer = await setBaseline(workspaceId, run.run_id, replacing);
+      setPinnedBaseline(pointer);
+      setPinSuccess("Baseline pinned and verified. Existing comparisons remain immutable.");
+    } catch (reason) {
+      setPinError(reason instanceof Error ? reason.message : "Could not pin baseline.");
+    } finally {
+      setPinning(false);
+    }
+  }
 
   return (
     <div className="stack">
@@ -98,6 +134,24 @@ export default function RunResult() {
               <dt>Result SHA-256</dt><dd><code>{run.result_sha256 ?? "Pending completion"}</code></dd>
               <dt>EvalOps version</dt><dd>{run.evalops_version ?? "Pending completion"}</dd>
             </dl>
+          </section>
+          <section className="surface" aria-labelledby="run-baseline-heading">
+            <h3 id="run-baseline-heading">Workspace baseline</h3>
+            {pinError && <p role="alert" className="error-message">{pinError}</p>}
+            {pinSuccess && <p role="status" className="success-message">{pinSuccess}</p>}
+            {!baselineLoaded && !pinError && <p className="field-hint">Checking current pinned baseline…</p>}
+            {baselineLoaded && baseline?.run_id === run.run_id && (
+              <p role="status">This completed run is the pinned workspace baseline.</p>
+            )}
+            {run.result_sha256 && baselineLoaded && baseline?.run_id !== run.run_id && (
+              <button type="button" disabled={pinning} onClick={() => void pinRun()}>
+                {pinning ? "Pinning…" : baseline ? "Replace baseline with this run" : "Set as workspace baseline"}
+              </button>
+            )}
+            {!run.result_sha256 && (
+              <p className="empty-state">Only a completed run with verified result provenance can be pinned.</p>
+            )}
+            <p className="field-hint">Pinning is explicit. Existing comparisons keep their original baseline and result hashes.</p>
           </section>
           <div className="action-row">
             {run.job_id && (

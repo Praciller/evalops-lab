@@ -16,6 +16,8 @@ vi.mock("../api/client", () => ({
   validatePair: vi.fn(),
   createRun: vi.fn(),
   getRun: vi.fn(),
+  getBaseline: vi.fn(),
+  setBaseline: vi.fn(),
 }));
 
 const ground = {
@@ -49,6 +51,7 @@ function mount(path: string, element: React.ReactNode) {
 beforeEach(() => {
   vi.mocked(api.listInputs).mockResolvedValue([]);
   vi.mocked(api.listRuns).mockResolvedValue([]);
+  vi.mocked(api.getBaseline).mockResolvedValue(null);
 });
 afterEach(() => vi.resetAllMocks());
 

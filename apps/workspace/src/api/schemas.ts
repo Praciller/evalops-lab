@@ -105,3 +105,82 @@ export type RunRequest = {
   dataset_name: string;
   dataset_version: string;
 };
+// Phase 6.3 — private Workspace comparison contracts (not public evidence).
+export const BaselinePointerSchema = z.object({
+  run_id: z.string().regex(/^run-[0-9a-f]{32}$/),
+  result_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  pinned_at: z.string(),
+}).strict();
+export type BaselinePointer = z.infer<typeof BaselinePointerSchema>;
+export const BaselineResponseSchema = z.object({
+  baseline: BaselinePointerSchema.nullable(),
+}).strict();
+
+export const ComparisonModeSchema = z.enum(["CANONICAL", "EXPLORATORY_ONLY"]);
+export type ComparisonMode = z.infer<typeof ComparisonModeSchema>;
+export const ComparisonCompatibilitySchema = z.object({
+  status: z.enum(["COMPARABLE", "NON_COMPARABLE"]),
+  reasons: z.array(z.object({
+    field: z.string(),
+    baseline: z.string(),
+    candidate: z.string(),
+  }).strict()),
+}).strict();
+export type ComparisonCompatibility = z.infer<typeof ComparisonCompatibilitySchema>;
+export const MetricComparisonSchema = z.object({
+  metric_name: z.string(),
+  direction: z.enum(["higher_is_better", "lower_is_better"]),
+  baseline: z.number().nullable(),
+  current: z.number().nullable(),
+  delta: z.number().nullable(),
+  status: z.enum(["PASS", "REGRESSION", "MISSING"]),
+  reason: z.string(),
+}).strict();
+export const ComparisonRecordSchema = z.object({
+  schema_version: z.literal("workspace-comparison-v1"),
+  comparison_id: z.string().regex(/^comparison-[0-9a-f]{32}$/),
+  workspace_id: z.string().regex(/^ws-[0-9a-f]{32}$/),
+  mode: ComparisonModeSchema,
+  compatibility: ComparisonCompatibilitySchema,
+  baseline_run_id: z.string(),
+  baseline_result_sha256: z.string(),
+  candidate_run_id: z.string(),
+  candidate_result_sha256: z.string(),
+  policy_version: z.literal("workspace-retrieval-regression-v1"),
+  regression_report: z.object({
+    passed: z.boolean(),
+    comparisons: z.array(MetricComparisonSchema),
+  }).strict(),
+  created_at: z.string(),
+}).strict();
+export type ComparisonRecord = z.infer<typeof ComparisonRecordSchema>;
+export const ComparisonListResponseSchema = z.object({
+  comparisons: z.array(ComparisonRecordSchema),
+}).strict();
+export const ComparisonConflictResponseSchema = z.object({
+  error: ErrorDetailSchema,
+  compatibility: ComparisonCompatibilitySchema,
+}).strict();
+
+export const FailureTransitionSchema = z.enum([
+  "UNCHANGED_PASS",
+  "REGRESSED",
+  "IMPROVED",
+  "PERSISTENT_FAILURE",
+  "CHANGED_FAILURE",
+]);
+export type FailureTransition = z.infer<typeof FailureTransitionSchema>;
+export const QueryFailureTransitionSchema = z.object({
+  query_id: z.string(),
+  transition: FailureTransitionSchema,
+  baseline_category: z.string(),
+  candidate_category: z.string(),
+  baseline_metrics: z.record(z.string(), z.number()),
+  candidate_metrics: z.record(z.string(), z.number()),
+}).strict();
+export const ComparisonFailuresResponseSchema = z.object({
+  comparison_id: z.string(),
+  total_count: z.number().int().nonnegative(),
+  transitions: z.array(QueryFailureTransitionSchema),
+}).strict();
+export type ComparisonFailuresResponse = z.infer<typeof ComparisonFailuresResponseSchema>;
