@@ -184,3 +184,56 @@ export const ComparisonFailuresResponseSchema = z.object({
   transitions: z.array(QueryFailureTransitionSchema),
 }).strict();
 export type ComparisonFailuresResponse = z.infer<typeof ComparisonFailuresResponseSchema>;
+
+
+export const ExportClassificationSchema = z.object({
+  verification_status: z.enum(["UNVERIFIED", "PARTIAL", "VERIFIED", "NOT_RUN"]),
+  data_kind: z.enum(["SYNTHETIC_FIXTURE", "CURATED_DATASET"]),
+  limitations: z.array(z.string()),
+}).strict();
+export type ExportClassification = z.infer<typeof ExportClassificationSchema>;
+
+export const ExportFileSchema = z.object({
+  filename: z.string().regex(/^(?:[a-z0-9-]+\/)?[a-z0-9-]+\.json$/),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  size_bytes: z.number().int().nonnegative(),
+}).strict();
+export type ExportFile = z.infer<typeof ExportFileSchema>;
+
+export const ExportPreviewSchema = z.object({
+  schema_version: z.literal("workspace-export-preview-v1"),
+  preview_id: z.string().regex(/^preview-[0-9a-f]{32}$/),
+  source_type: z.enum(["run", "comparison"]),
+  source_id: z.string().regex(/^(?:run|comparison)-[0-9a-f]{32}$/),
+  eligible: z.boolean(),
+  blocking_reasons: z.array(z.string()),
+  output_files: z.array(ExportFileSchema),
+  included: z.array(z.string()),
+  removed: z.array(z.string()),
+  transformed: z.array(z.string()),
+  classification: ExportClassificationSchema,
+  expires_at: z.string(),
+}).strict();
+export type ExportPreview = z.infer<typeof ExportPreviewSchema>;
+
+export const ExportManifestSchema = z.object({
+  schema_version: z.literal("workspace-export-manifest-v1"),
+  export_id: z.string().regex(/^export-[0-9a-f]{32}$/),
+  source_type: z.enum(["run", "comparison"]),
+  source_id: z.string().regex(/^(?:run|comparison)-[0-9a-f]{32}$/),
+  destination: z.string(),
+  files: z.array(ExportFileSchema),
+  classification: ExportClassificationSchema,
+  created_at: z.string(),
+}).strict();
+export type ExportManifest = z.infer<typeof ExportManifestSchema>;
+export const ExportListResponseSchema = z.object({
+  exports: z.array(ExportManifestSchema),
+}).strict();
+export type ExportListResponse = z.infer<typeof ExportListResponseSchema>;
+
+export type ExportPreviewRequest = {
+  source_type: "run" | "comparison";
+  source_id: string;
+  classification: ExportClassification;
+};
