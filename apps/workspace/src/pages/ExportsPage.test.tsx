@@ -28,8 +28,8 @@ const complete: RunSummary = {
   evaluator_versions: { retrieval: "deterministic-v1" },
   top_k: 1, system_name: "local", dataset_name: "fixture",
   dataset_version: "v1", created_at: "2026-10-24T00:00:00Z",
-  metrics: { mrr: 1 }, failure_counts: {},
-  result_sha256: SHA, evalops_version: "0.1.0",
+  metrics: null, failure_counts: null,
+  result_sha256: null, evalops_version: null,
 };
 const preview: ExportPreview = {
   schema_version: "workspace-export-preview-v1",
