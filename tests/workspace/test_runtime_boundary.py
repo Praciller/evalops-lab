@@ -87,9 +87,7 @@ def test_reject_tampered_wheel_byte_even_when_manifest_remains(
         verify_runtime_boundary(dist, staged, wheel)
 
 
-def test_reject_unlisted_wheel_file(
-    build: tuple[Path, Path, Path], tmp_path: Path
-) -> None:
+def test_reject_unlisted_wheel_file(build: tuple[Path, Path, Path], tmp_path: Path) -> None:
     dist, staged, _ = build
     wheel = tmp_path / "extra.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
