@@ -7,6 +7,9 @@ import time
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("fastapi")
+
 from fastapi.testclient import TestClient
 
 from evalops.workspace.api.app import create_workspace_app
