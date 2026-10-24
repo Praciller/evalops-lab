@@ -11,13 +11,12 @@ const CAND_PRED =
   '{"query_id":"q1","retrieved_document_ids":["missing"]}\n' +
   '{"query_id":"q2","retrieved_document_ids":["missing","d2"]}\n';
 
-async function evaluate(page: Page, k: number, selectLatestPrediction = false): Promise<string> {
+async function evaluate(page: Page, k: number, predictionInputId?: string): Promise<string> {
   await page.getByRole("link", { name: "Runs", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Configure & review a run" })).toBeVisible();
   await page.locator("#top-k").fill(String(k));
-  if (selectLatestPrediction) {
-    const choices = await page.locator("#prediction-select option").count();
-    await page.locator("#prediction-select").selectOption({ index: choices - 1 });
+  if (predictionInputId) {
+    await page.locator("#prediction-select").selectOption(predictionInputId);
   }
   await page.getByRole("button", { name: "Validate & review" }).click();
   await expect(page.getByRole("heading", { name: "Review before evaluation" })).toBeVisible();
@@ -49,8 +48,14 @@ test("real compatible baseline and candidate keep immutable comparisons and priv
   await expect(page.getByText("This completed run is the pinned workspace baseline.")).toBeVisible();
 
   await page.getByRole("link", { name: "Inputs", exact: true }).click();
+  const candidateUploadResponse = page.waitForResponse(response =>
+    response.request().method() === "POST" &&
+    response.url().endsWith(`/workspaces/${ws}/inputs/upload`) && response.ok()
+  );
   await uploadJsonl(page, "retrieval_predictions", "candidate.jsonl", CAND_PRED);
-  const candidateId = await evaluate(page, 2, true);
+  const registeredCandidate = await (await candidateUploadResponse).json() as { input_id: string };
+  expect(registeredCandidate.input_id).toMatch(/^input-[0-9a-f]{32}$/);
+  const candidateId = await evaluate(page, 2, registeredCandidate.input_id);
 
   await page.getByRole("link", { name: "Comparisons", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Compare retrieval runs" })).toBeVisible();
