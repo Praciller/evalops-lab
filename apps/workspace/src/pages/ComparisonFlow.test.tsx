@@ -154,6 +154,7 @@ describe("private Failure Explorer", () => {
     );
     mount(`/workspaces/${WS}/comparisons/${ID}/failures`, <FailuresPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("unavailable");
+    expect(screen.getByText(/EXPLORATORY_ONLY — Not eligible for public regression claim/)).toBeInTheDocument();
     expect(screen.queryByText(/No transitions match these filters/)).not.toBeInTheDocument();
   });
 });

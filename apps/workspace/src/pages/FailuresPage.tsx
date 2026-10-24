@@ -44,11 +44,15 @@ export default function FailuresPage() {
         if (live) { setError("Could not load local comparisons."); setLoading(false); }
       });
     } else {
-      Promise.all([
-        getComparison(workspaceId, comparisonId),
-        listComparisonFailures(workspaceId, comparisonId, applied),
-      ]).then(([item, data]) => {
-        if (live) { setRecord(item); setReport(data); setLoading(false); }
+      setRecord(null);
+      setReport(null);
+      // Preserve immutable operand context even if a failure sidecar is unavailable.
+      getComparison(workspaceId, comparisonId).then((item) => {
+        if (!live) return null;
+        setRecord(item);
+        return listComparisonFailures(workspaceId, comparisonId, applied);
+      }).then((data) => {
+        if (live) { setReport(data); setLoading(false); }
       }).catch((reason) => {
         if (live) {
           setReport(null);

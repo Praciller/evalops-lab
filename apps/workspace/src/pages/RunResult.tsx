@@ -139,7 +139,7 @@ export default function RunResult() {
             <h3 id="run-baseline-heading">Workspace baseline</h3>
             {pinError && <p role="alert" className="error-message">{pinError}</p>}
             {pinSuccess && <p role="status" className="success-message">{pinSuccess}</p>}
-            {!baselineLoaded && <p className="field-hint">Checking current pinned baseline…</p>}
+            {!baselineLoaded && !pinError && <p className="field-hint">Checking current pinned baseline…</p>}
             {baselineLoaded && baseline?.run_id === run.run_id && (
               <p role="status">This completed run is the pinned workspace baseline.</p>
             )}
