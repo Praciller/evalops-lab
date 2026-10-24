@@ -34,6 +34,7 @@ test("real incompatible k and ground-truth population fail canonical, explorator
   await page.getByRole("button", { name: "Set as workspace baseline" }).click();
   await expect(page.getByText("This completed run is the pinned workspace baseline.")).toBeVisible();
   const candidate = await createRun(page, 20);
+  expect(candidate).not.toBe(baseline);
   await page.getByRole("link", { name: "Comparisons", exact: true }).click();
   await page.getByLabel("Completed candidate run").selectOption(candidate);
   await page.getByRole("button", { name: "Check & create canonical comparison" }).click();
@@ -47,6 +48,7 @@ test("real incompatible k and ground-truth population fail canonical, explorator
   });
   await page.getByRole("button", { name: "Create separate exploratory comparison" }).click();
   await expect(page.getByRole("heading", { name: "Comparison detail" })).toBeVisible();
+  expect(page.url()).toContain(`/workspaces/${ws}/comparisons/`);
   await expect(page.getByText(/EXPLORATORY_ONLY — Not eligible for public regression claim/)).toBeVisible();
   await expect(page.getByRole("heading", { name: /Population compatibility — NON_COMPARABLE/ })).toBeVisible();
 
