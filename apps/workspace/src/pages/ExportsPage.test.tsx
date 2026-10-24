@@ -73,7 +73,8 @@ function mount() {
 }
 
 async function chooseRun() {
-  await userEvent.selectOptions(await screen.findByLabelText("Source ID"), RUN);
+  await screen.findByRole("option", { name: /Fixture run/ });
+  await userEvent.selectOptions(screen.getByLabelText("Source ID"), RUN);
 }
 
 beforeEach(() => {
