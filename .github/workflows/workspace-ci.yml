@@ -73,6 +73,18 @@ jobs:
         run: python scripts/stage_workspace_assets.py
       - name: Build release-candidate wheel without publishing
         run: python -m build --wheel
+      - name: Build source archive and verify rebuilt wheel retains exact assets
+        run: |
+          python -m build --sdist
+          sdist=$(find dist -maxdepth 1 -name '*.tar.gz' -type f -print -quit)
+          test -n "$sdist"
+          mkdir -p dist/from-sdist
+          python -m pip wheel --no-deps --wheel-dir dist/from-sdist "$sdist"
+          rebuilt=$(find dist/from-sdist -maxdepth 1 -name '*.whl' -type f -print -quit)
+          test -n "$rebuilt"
+          python scripts/verify_workspace_runtime_boundary.py --wheel "$rebuilt"
+          EVALOPS_WHEEL_PATH="$rebuilt" python -m pytest tests/workspace/test_package_smoke.py -q
+          sha256sum "$sdist" "$rebuilt"
       - name: Inspect distributable runtime boundaries and exact asset bytes
         run: |
           wheel=$(find dist -maxdepth 1 -name '*.whl' -type f -print -quit)
