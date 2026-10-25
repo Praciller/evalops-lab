@@ -140,6 +140,29 @@ def test_host_validation_applies_to_api_and_api_does_not_fall_through_to_spa(
     assert "workspace" in spa.text
 
 
+def test_spa_routes_only_serve_the_entrypoint_and_bundled_assets(tmp_path: Path) -> None:
+    static_dir = tmp_path / "static"
+    assets_dir = static_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (static_dir / "index.html").write_text("<html>workspace shell</html>", encoding="utf-8")
+    (static_dir / "private-config.txt").write_text("DO_NOT_SERVE", encoding="utf-8")
+    (assets_dir / "app.js").write_text("console.log('bundled')", encoding="utf-8")
+    client, _, origin = _client(tmp_path)
+    headers = _headers(origin)
+
+    for route in ("/", "/workspace/runs", "/private-config.txt", "/index.html"):
+        response = client.get(route, headers=headers)
+        assert response.status_code == 200
+        assert response.text == "<html>workspace shell</html>"
+        assert "DO_NOT_SERVE" not in response.text
+
+    bundled = client.get("/assets/app.js", headers=headers)
+    assert bundled.status_code == 200
+    assert bundled.text == "console.log('bundled')"
+    unknown_api = client.get("/api/v1/does-not-exist", headers=headers)
+    assert unknown_api.status_code == 404
+
+
 def test_openapi_schema_matches_committed_file(tmp_path: Path) -> None:
     """Ensure the committed openapi.json stays in sync with the FastAPI app."""
     import json

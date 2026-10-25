@@ -235,13 +235,9 @@ def create_workspace_app(
         async def serve_workspace(path: str) -> Response:
             if path.startswith("api/"):
                 raise StarletteHTTPException(status_code=404)
-            candidate = (static_root / path).resolve()
-            try:
-                candidate.relative_to(static_root)
-            except ValueError:
-                raise StarletteHTTPException(status_code=404) from None
-            if candidate.is_file():
-                return FileResponse(candidate)
+            # The /assets mount serves verified bundled files. All other
+            # frontend URLs are SPA routes, not arbitrary filesystem lookups.
+            # Never combine a client-supplied route with the static root.
             index_path = static_root / "index.html"
             if index_path.is_file():
                 return FileResponse(index_path)

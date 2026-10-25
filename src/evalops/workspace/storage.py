@@ -464,6 +464,8 @@ class WorkspaceStore:
         return snapshot
 
     def _run_config_path(self, workspace_id: str, run_id: str) -> Path:
+        if not _WORKSPACE_ID_RE.fullmatch(workspace_id):
+            raise UnknownWorkspaceError("workspace identifier is invalid")
         if not _RUN_ID_RE.fullmatch(run_id):
             raise WorkspaceStorageError("run identifier is invalid")
         workspace_root = (self._workspaces_path / workspace_id).resolve()
@@ -890,6 +892,8 @@ class WorkspaceStore:
             return updated
 
     def _inputs_directory(self, workspace_id: str) -> Path:
+        if not _WORKSPACE_ID_RE.fullmatch(workspace_id):
+            raise UnknownWorkspaceError("workspace identifier is invalid")
         workspace_root = (self._workspaces_path / workspace_id).resolve()
         if not workspace_root.is_relative_to(self._workspaces_path.resolve()):
             raise WorkspaceStorageError("workspace directory is unsafe")
