@@ -44,3 +44,4 @@ torch_extensions/
 
 # Generated local UI packaging assets (build using stage_workspace_assets.py)
 src/evalops/workspace/static/
+apps/workspace/coverage/
