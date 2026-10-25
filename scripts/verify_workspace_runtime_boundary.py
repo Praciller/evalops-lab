@@ -38,6 +38,8 @@ _INERT_URL_PREFIXES = (
     "https://react.dev/errors/",
     "https://reactrouter.com/",
     "https://json-schema.org/draft/",
+    "http://json-schema.org/draft-",
+    "https://json-schema.org/draft-",
 )
 
 
