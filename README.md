@@ -25,6 +25,13 @@ The console is a static, read-only presentation of explicitly allowlisted,
 sanitized JSON artifacts. It does not run evaluators, call model providers, or
 make production model-superiority claims.
 
+**Second surface — Local Evaluation Workspace:** [Setup and trust guide](docs/local-workspace.md).
+The separate `evalops workspace` app runs privately on `127.0.0.1`, accepts
+local inputs, evaluates retrieval runs and canonical comparisons, and offers an
+explicit two-step *sanitized local export*. It does not publish to Pages or
+transfer private workspace data into this hosted console automatically.
+The Python CLI remains the reproducible automation surface.
+
 ![Evidence Console overview](docs/screenshots/evidence-console/overview-desktop.png)
 
 *Production Evidence Console view with provenance and scope labels visible. The
@@ -75,8 +82,9 @@ can trace a public claim back to a bounded artifact or a tested implementation.
   allowlist, literal scope labels, and fail-closed frontend validation.
 - **Evaluation engineering:** typed Pydantic models, dependency-light Python,
   TypeScript/Zod public interfaces, and deterministic generated fixtures.
-- **Delivery discipline:** Python/Web CI, public Storybook checks, browser and
-  accessibility tests, CodeQL, Dependency Review, and static GitHub Pages.
+- **Delivery discipline:** Python/Web/Local Workspace CI, clean-wheel and
+  packaged browser acceptance, public Storybook checks, accessibility tests,
+  CodeQL, Dependency Review, and static GitHub Pages.
 
 ## Architecture
 
@@ -96,6 +104,12 @@ only the explicit `apps/web/public/evidence/index.json` allowlist and the
 artifact files named by that index. It is read-only and fail-closed; it has no
 API route, server action, inference path, provider credential, persistence,
 analytics, or external runtime fetch.
+
+The **Local Workspace** is a distinct, locally persisted FastAPI + Vite/Python
+wheel application for private evaluation. Its owner-confirmed export flows pass
+through the existing Public Evidence Contract adapter/serializer. Exporting is
+not publishing; only a separate reviewed PR can introduce allowlisted public
+artifacts. See [Workspace setup](docs/local-workspace.md).
 
 ### Trust & Limitations
 
@@ -133,6 +147,10 @@ its regression result is integration evidence, not an official benchmark.*
 
 - [EvalOps CI](.github/workflows/ci.yml) runs Python tests, lint, formatting,
   and type checks.
+- [Local Workspace CI](.github/workflows/workspace-ci.yml) tests the private
+  Workspace APIs and browser flows, exact static asset integrity, isolated
+  clean-wheel install, packaged browser and restart behavior, and runtime
+  security/no-network boundaries.
 - [Web Evidence Console CI](.github/workflows/web-ci.yml) runs frontend lint,
   type checks, unit tests, Storybook publication checks, browser tests, and
   accessibility checks.
@@ -174,6 +192,23 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+For an optional **local interactive session** (requires a built Workspace UI):
+
+```bash
+python -m pip install -e ".[dev,workspace]"
+cd apps/workspace
+npm ci
+npm run build
+cd ../..
+python scripts/stage_workspace_assets.py
+evalops workspace --no-open
+```
+
+The output contains a one-time private browser bootstrap URL; do not share it.
+For a clean packaged wheel and the owner-gated release boundary, follow the
+[Local Workspace guide](docs/local-workspace.md). The existing `v0.1.0`
+release is **not** a Workspace release.
 
 The complete Storybook, Pages, browser, evidence-regeneration, external-dataset,
 and opt-in evaluator protocols are documented in [CONTRIBUTING.md](CONTRIBUTING.md),
@@ -251,8 +286,10 @@ comparison.
 - Future: expand the curated Thai evaluation benchmark.
 - Future: add code-generation and code-migration evaluator adapters.
 
-Interactive evaluation running, external production benchmarks, and provider
-inference are not presented as implemented features of the public console.
+Interactive evaluation runs only in the **private Local Workspace**, not the
+hosted public Evidence Console. External production benchmarks and provider
+inference are not implied by this local feature. The `v0.2.0` Workspace
+package release remains future and owner-gated.
 
 ## Contributing, security, and license
 

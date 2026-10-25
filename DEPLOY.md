@@ -14,6 +14,62 @@
 
 The Evidence Console is a static, read-only presentation of the checked-in Public Evidence Contract V1 bundle. Deployment does not execute evaluators, call model providers, download external datasets, or publish raw corpus/model-response data.
 
+## Local Workspace packaging is not deployment
+
+The hosted Evidence Console above is the **only GitHub Pages product**. The
+interactive [Local Evaluation Workspace](docs/local-workspace.md) is private,
+runs on `127.0.0.1`, and must never be deployed to Pages, a cloud host or LAN
+by reusing the public static deployment workflow.
+
+Phase 6.4 acceptance produces a verified **candidate Python wheel** with the
+Vite frontend staged as package data. A candidate wheel is not a published
+release and is not evidence that an existing package on PyPI includes the UI.
+
+From a checked-out source tree, after a clean Python+Workspace test pass:
+
+```bash
+cd apps/workspace
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+cd ../..
+python scripts/export_workspace_openapi.py --check
+python scripts/stage_workspace_assets.py
+python -m build --wheel
+python scripts/verify_workspace_runtime_boundary.py --wheel dist/evalops_lab-0.1.0-py3-none-any.whl
+python scripts/verify_workspace_wheel.py dist/evalops_lab-0.1.0-py3-none-any.whl --browser
+```
+
+The clean-wheel verifier installs `[workspace]` into an isolated environment
+outside the repository, boots the real Python/FastAPI CLI, verifies packaged
+static resources/loopback HTTP, tests a synthetic retrieval-and-sanitized-export
+browser flow and checks state persistence and fresh bootstrap on restart.
+CI must retain the no-external-request, no-credential, exact wheel asset SHA,
+accessibility and existing core/public regression gates.
+
+**Local sanitized export is not publication.** The owner selects an existing
+export destination and separately confirms a preview. Exported files do not
+enter `apps/web/public/evidence/` automatically and no GitHub push/commit,
+Pages deployment, or `OFFICIAL_BENCHMARK` claim is performed by Workspace.
+
+### Future owner-gated `v0.2.0` release checklist
+
+- [ ] Phase 6.4 changes merged and accepted from the **final** `main` SHA.
+- [ ] Python full suite, Workspace UI/source and packaged-browser flows, public
+      Web/Storybook/Pages checks, accessibility, CodeQL, dependency review,
+      loopback-only and runtime-boundary leak checks pass at that SHA.
+- [ ] Rebuild/inspect the wheel in a clean environment, record its SHA-256,
+      version, test runs, platform limitations and reproducible commands.
+- [ ] Review official benchmark/data classification claims and privacy boundaries.
+- [ ] Obtain explicit owner approval in a separate release action/PR **before**
+      bumping package metadata or creating/publishing `v0.2.0`.
+
+The existing `v0.1.0` tag/release is historical. **Never move or repoint it.**
+No release/tag, wheel upload or public deployment is authorized by a local
+package verification or this documentation change.
+
 ## Build and verification
 
 The Pages workflow runs the frontend quality gates, builds and verifies the curated public Storybook, assembles the Pages-mode static export, verifies the `/evalops-lab` browser path, checks the expected generated routes, and uploads only `apps/web/out` with the official GitHub Pages artifact action.

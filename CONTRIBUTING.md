@@ -63,6 +63,49 @@ npm run test:e2e:pages
 
 Include accessibility/axe coverage, representative mobile overflow checks, and reviewed screenshots when the visual surface changes. Keep the public Storybook allowlist and static-export boundaries intact.
 
+## Local Workspace changes
+
+The interactive Workspace is a **private localhost application**, separate from
+the public Evidence Console and its Storybook. For its source code, install the
+optional dependencies and run its own gates:
+
+```bash
+python -m pip install -e ".[dev,workspace]"
+ruff check .
+ruff format --check .
+mypy src
+pytest
+cd apps/workspace
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+cd ../..
+python scripts/export_workspace_openapi.py --check
+python scripts/stage_workspace_assets.py
+python -m build --wheel
+python scripts/verify_workspace_runtime_boundary.py --wheel dist/evalops_lab-0.1.0-py3-none-any.whl
+python scripts/verify_workspace_wheel.py dist/evalops_lab-0.1.0-py3-none-any.whl --browser
+```
+
+The wheel filename above refers to the **current candidate version**, not an
+approved `v0.2.0` release. The installed runtime must work outside the checkout
+on `127.0.0.1`, without Node.js, external provider calls or public writes.
+The separate Playwright verification process may use Node.
+
+**Generated assets rule:** edit `apps/workspace`, never hand-edit
+`src/evalops/workspace/static`. Rebuild Vite, stage the checked output, and
+verify both package and browser flows. Keep OpenAPI schemas synchronized with
+Workspace API changes; do not loosen data/claim-scope policy to make tests pass.
+
+Exports must remain two-step, owner-classified, non-overwriting, and sanitized
+through the existing Public Evidence Contract. `EXPLORATORY_ONLY` comparisons
+cannot become public regression claims. Never add implicit Pages/GitHub
+publication, private local path or raw input leakage, LAN binding, telemetry
+or hosted model inference. See [Local Workspace](docs/local-workspace.md).
+
 ## Data and security rules
 
 - Never commit API keys, tokens, credentials, `.env` files, or secret-bearing logs.
