@@ -46,6 +46,12 @@ jobs:
       - name: Install npm dependencies
         working-directory: apps/workspace
         run: npm ci
+      - name: Workspace dependency audit (all)
+        working-directory: apps/workspace
+        run: npm audit --audit-level=moderate
+      - name: Workspace dependency audit (production)
+        working-directory: apps/workspace
+        run: npm audit --omit=dev --audit-level=moderate
       - name: Workspace lint
         working-directory: apps/workspace
         run: npm run lint
