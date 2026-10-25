@@ -37,6 +37,7 @@ _INERT_URL_PREFIXES = (
     "https://www.w3.org/",
     "https://react.dev/errors/",
     "https://reactrouter.com/",
+    "https://json-schema.org/draft/",
 )
 
 
