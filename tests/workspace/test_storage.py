@@ -76,6 +76,28 @@ def test_store_rejects_duplicate_and_unknown_workspace_ids(tmp_path: Path) -> No
         store.get_workspace("ws-" + "0" * 32)
 
 
+@pytest.mark.parametrize(
+    "workspace_id",
+    [
+        "../outside",
+        "/tmp/outside",
+        "ws-invalid",
+        "ws-" + "A" * 32,
+        "ws-" + "0" * 32 + "/../ws-" + "1" * 32,
+    ],
+)
+def test_input_and_run_paths_reject_invalid_workspace_id_before_access(
+    tmp_path: Path, workspace_id: str
+) -> None:
+    store = WorkspaceStore(tmp_path / "workspace-root")
+    store.initialize()
+
+    with pytest.raises(UnknownWorkspaceError, match="workspace identifier is invalid"):
+        store._inputs_directory(workspace_id)
+    with pytest.raises(UnknownWorkspaceError, match="workspace identifier is invalid"):
+        store._run_config_path(workspace_id, "run-" + "0" * 32)
+
+
 def test_store_rejects_unknown_schema_versions(tmp_path: Path) -> None:
     root = tmp_path / "workspace-root"
     store = WorkspaceStore(root)
