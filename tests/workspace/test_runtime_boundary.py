@@ -123,12 +123,18 @@ def test_loopback_exemption_is_exact_and_not_a_fetch_exemption(unsafe: bytes) ->
 
 def test_exact_js_ipv6_url_parser_template_is_inert() -> None:
     scan_content("assets/app.js", b"const u = `http://[${n}]`")
+    scan_content("assets/app.js", b"const u = `http://[${e}]`")
 
 
 @pytest.mark.parametrize(
     "unsafe",
     [
         b'fetch("http://[${n}]")',
+        b'fetch("http://[${e}]")',
+        b"fetch(`http://[${e}]`)",
+        b'const remote = "http://[${e}]:9999"',
+        b'const remote = "https://[${e}]"',
+        b'const remote = "http://[${e}]/endpoint"',
         b'const remote = "http://[${n}]:9999"',
         b'const remote = "https://[${n}]"',
         b'const remote = "http://[${n}]/endpoint"',

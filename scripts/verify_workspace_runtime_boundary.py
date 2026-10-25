@@ -73,7 +73,14 @@ def scan_content(name: str, content: bytes) -> None:
         # Reject any URL with a path, port, credentials or lookalike hostname.
         inert_loopback = url in {"http://localhost", "http://localhost/"}
         # Bundled URL parsers assemble IPv6 origins with this inert JS placeholder.
-        inert_url_parser_template = url in {"http://[${n}]", "http://[${n}]/"}
+        # Vite 8 Rolldown minifies this inert Zod IPv6 parser variable from n to e.
+        # Accept only exact known parser placeholders; reject ports, paths and sinks.
+        inert_url_parser_template = url in {
+            "http://[${n}]",
+            "http://[${n}]/",
+            "http://[${e}]",
+            "http://[${e}]/",
+        }
         inert_documentation = any(url.startswith(prefix) for prefix in _INERT_URL_PREFIXES)
         if name.endswith((".html", ".css")) or not (
             inert_loopback or inert_url_parser_template or inert_documentation
