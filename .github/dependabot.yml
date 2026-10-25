@@ -16,6 +16,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Keep incompatible major toolchain updates out of CI until upstream peers support them.
+    ignore:
+      - dependency-name: eslint
+        versions: [">=10.0.0 <11.0.0"]
+      - dependency-name: typescript
+        versions: [">=7.0.0 <8.0.0"]
     groups:
       routine-minor-patch:
         update-types:
@@ -27,6 +33,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # typescript-eslint@8 requires TypeScript <6.1; 7.x currently breaks npm ci.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7.0.0 <8.0.0"]
     groups:
       routine-minor-patch:
         update-types:
