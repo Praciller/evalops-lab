@@ -137,3 +137,9 @@ def test_exact_js_ipv6_url_parser_template_is_inert() -> None:
 def test_js_url_parser_exemption_is_not_a_network_exemption(unsafe: bytes) -> None:
     with pytest.raises(RuntimeBoundaryError):
         scan_content("assets/app.js", unsafe)
+
+
+def test_json_schema_identifier_is_inert_but_not_an_allowed_network_sink() -> None:
+    scan_content("assets/app.js", b'const schema = "https://json-schema.org/draft/2020-12/schema"')
+    with pytest.raises(RuntimeBoundaryError):
+        scan_content("assets/app.js", b'fetch("https://json-schema.org/draft/2020-12/schema")')
