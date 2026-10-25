@@ -143,3 +143,10 @@ def test_json_schema_identifier_is_inert_but_not_an_allowed_network_sink() -> No
     scan_content("assets/app.js", b'const schema = "https://json-schema.org/draft/2020-12/schema"')
     with pytest.raises(RuntimeBoundaryError):
         scan_content("assets/app.js", b'fetch("https://json-schema.org/draft/2020-12/schema")')
+
+
+def test_legacy_json_schema_draft_07_identifier_is_inert() -> None:
+    scan_content("assets/app.js", b'const schema = "http://json-schema.org/draft-07/schema#"')
+    scan_content("assets/app.js", b'const schema = "https://json-schema.org/draft-07/schema#"')
+    with pytest.raises(RuntimeBoundaryError):
+        scan_content("assets/app.js", b'fetch("http://json-schema.org/draft-07/schema#")')
