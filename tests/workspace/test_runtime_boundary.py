@@ -100,3 +100,22 @@ def test_reject_unlisted_wheel_file(build: tuple[Path, Path, Path], tmp_path: Pa
         archive.writestr("evalops/workspace/static/assets/unlisted.js", "bad")
     with pytest.raises(RuntimeBoundaryError, match="differ"):
         verify_runtime_boundary(dist, staged, wheel)
+
+
+def test_exact_loopback_url_parsing_placeholder_is_inert() -> None:
+    scan_content("assets/app.js", b'const u = new URL("http://localhost")')
+    scan_content("assets/app.js", b'const u = new URL("http://localhost/")')
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        b'fetch("http://localhost")',
+        b'const endpoint = "http://localhost:8080/private"',
+        b'const endpoint = "http://localhost.evil.example/"',
+        b'const endpoint = "http://localhost/api"',
+    ],
+)
+def test_loopback_exemption_is_exact_and_not_a_fetch_exemption(unsafe: bytes) -> None:
+    with pytest.raises(RuntimeBoundaryError):
+        scan_content("assets/app.js", unsafe)
