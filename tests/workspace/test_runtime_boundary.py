@@ -119,3 +119,21 @@ def test_exact_loopback_url_parsing_placeholder_is_inert() -> None:
 def test_loopback_exemption_is_exact_and_not_a_fetch_exemption(unsafe: bytes) -> None:
     with pytest.raises(RuntimeBoundaryError):
         scan_content("assets/app.js", unsafe)
+
+
+def test_exact_js_ipv6_url_parser_template_is_inert() -> None:
+    scan_content("assets/app.js", b'const u = `http://[${n}]`')
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        b'fetch("http://[${n}]")',
+        b'const remote = "http://[${n}]:9999"',
+        b'const remote = "https://[${n}]"',
+        b'const remote = "http://[${n}]/endpoint"',
+    ],
+)
+def test_js_url_parser_exemption_is_not_a_network_exemption(unsafe: bytes) -> None:
+    with pytest.raises(RuntimeBoundaryError):
+        scan_content("assets/app.js", unsafe)
