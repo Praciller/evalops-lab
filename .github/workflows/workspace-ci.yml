@@ -46,6 +46,9 @@ jobs:
       - name: Install npm dependencies
         working-directory: apps/workspace
         run: npm ci
+      - name: Verify Workspace ESLint and TypeScript peer dependencies
+        working-directory: apps/workspace
+        run: npm ls eslint typescript --depth=4
       - name: Workspace dependency audit (all)
         working-directory: apps/workspace
         run: npm audit --audit-level=moderate
