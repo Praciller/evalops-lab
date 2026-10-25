@@ -163,7 +163,9 @@ def test_openapi_schema_matches_committed_file(tmp_path: Path) -> None:
 
         app = create_workspace_app(store, manager, origin)
         app.openapi_url = "/openapi.json"
-        schema = app.openapi()
+        from scripts.export_workspace_openapi import canonicalize_openapi_status_422
+
+        schema = canonicalize_openapi_status_422(app.openapi())
 
     generated = json.dumps(schema, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     committed = committed_path.read_text(encoding="utf-8")
