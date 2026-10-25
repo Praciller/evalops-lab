@@ -65,9 +65,12 @@ def scan_content(name: str, content: bytes) -> None:
     if _DIRECT_REQUEST.search(text):
         raise RuntimeBoundaryError("runtime request contains an external URL")
     for url in _URL.findall(text):
-        if name.endswith((".html", ".css")) or not any(
-            url.startswith(prefix) for prefix in _INERT_URL_PREFIXES
-        ):
+        # The exact loopback placeholder is used by bundled client libraries
+        # for URL parsing and is not an off-origin network destination.
+        # Reject any URL with a path, port, credentials or lookalike hostname.
+        inert_loopback = url in {"http://localhost", "http://localhost/"}
+        inert_documentation = any(url.startswith(prefix) for prefix in _INERT_URL_PREFIXES)
+        if name.endswith((".html", ".css")) or not (inert_loopback or inert_documentation):
             safe_host = re.sub(r"[^a-z0-9.-]", "", urlsplit(url).hostname or "invalid")[:80]
             raise RuntimeBoundaryError(
                 f"external URL host {safe_host} in runtime asset {Path(name).name}"
