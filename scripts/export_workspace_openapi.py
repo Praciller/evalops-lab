@@ -15,11 +15,38 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 repo_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo_root / "src"))
 
 OUTPUT_PATH = repo_root / "apps" / "workspace" / "openapi.json"
+
+
+def canonicalize_openapi_status_422(schema: dict[str, Any]) -> dict[str, Any]:
+    """Stabilize FastAPI's default 422 description across Python 3.11–3.13.
+
+    Python's HTTPStatus.UNPROCESSABLE_ENTITY phrase changed from
+    "Unprocessable Entity" to "Unprocessable Content" in newer runtimes.
+    This is a description-only difference, not a validation or API change.
+    Preserve every other response, status, schema and field exactly.
+    """
+    for path_item in schema.get("paths", {}).values():
+        if not isinstance(path_item, dict):
+            continue
+        for operation in path_item.values():
+            if not isinstance(operation, dict):
+                continue
+            responses = operation.get("responses", {})
+            if not isinstance(responses, dict):
+                continue
+            validation = responses.get("422")
+            if isinstance(validation, dict) and validation.get("description") in {
+                "Unprocessable Entity",
+                "Unprocessable Content",
+            }:
+                validation["description"] = "Unprocessable Entity"
+    return schema
 
 
 def generate_schema() -> str:
@@ -35,7 +62,7 @@ def generate_schema() -> str:
         app = create_workspace_app(store, manager, origin)
         # Patch openapi_url temporarily for schema generation
         app.openapi_url = "/openapi.json"
-        schema = app.openapi()
+        schema = canonicalize_openapi_status_422(app.openapi())
         return json.dumps(schema, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
