@@ -122,7 +122,7 @@ def test_loopback_exemption_is_exact_and_not_a_fetch_exemption(unsafe: bytes) ->
 
 
 def test_exact_js_ipv6_url_parser_template_is_inert() -> None:
-    scan_content("assets/app.js", b'const u = `http://[${n}]`')
+    scan_content("assets/app.js", b"const u = `http://[${n}]`")
 
 
 @pytest.mark.parametrize(
