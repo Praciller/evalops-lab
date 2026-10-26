@@ -127,8 +127,18 @@ def register_referenced_jsonl(
 
     store.get_workspace(workspace_id)
     _require_jsonl(source.name)
+    # This API is for explicit local files, not process-relative or remote
+    # network paths. Resolve only after rejecting ambiguous input locations.
+    if not source.is_absolute() or str(source).startswith(("\\\\", "//")):
+        raise InputValidationError(
+            "INVALID_REFERENCE_PATH", "referenced input must be an absolute local path"
+        )
     try:
         resolved = source.resolve(strict=True)
+        if str(resolved).startswith(("\\\\", "//")):
+            raise InputValidationError(
+                "INVALID_REFERENCE_PATH", "referenced input must resolve to a local path"
+            )
         if not resolved.is_file():
             raise InputValidationError("NOT_A_FILE", "referenced input must be a regular file")
         if resolved.stat().st_size > MAX_INPUT_BYTES:

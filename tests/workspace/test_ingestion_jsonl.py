@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -168,6 +169,54 @@ def test_unsupported_extension_is_rejected(
         )
 
 
+@pytest.mark.parametrize(
+    "unsafe_path",
+    [
+        "relative.jsonl",
+        "../relative.jsonl",
+        "//server/share/input.jsonl",
+        r"\\server\share\input.jsonl",
+    ],
+)
+def test_reference_requires_absolute_local_path(
+    workspace: tuple[WorkspaceStore, str, Path], unsafe_path: str
+) -> None:
+    store, workspace_id, root = workspace
+    with pytest.raises(InputValidationError) as caught:
+        register_referenced_jsonl(
+            store,
+            workspace_id,
+            kind=InputKind.RETRIEVAL_GROUND_TRUTH,
+            source=Path(unsafe_path),
+        )
+    assert caught.value.code == "INVALID_REFERENCE_PATH"
+    assert store.list_inputs(workspace_id) == []
+    assert not list((root / "workspaces" / workspace_id).rglob("*.jsonl"))
+
+
+def test_reference_rejects_network_target_after_resolve(
+    workspace: tuple[WorkspaceStore, str, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, workspace_id, _ = workspace
+    source = tmp_path / "local-input.jsonl"
+    source.write_bytes(GT)
+    original_resolve = Path.resolve
+
+    def redirected(path: Path, *args: object, **kwargs: object) -> Path:
+        if path == source:
+            return Path(r"\\server\share\remote.jsonl")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", redirected)
+    with pytest.raises(InputValidationError) as caught:
+        register_referenced_jsonl(
+            store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+        )
+    assert caught.value.code == "INVALID_REFERENCE_PATH"
+
+
 def test_reference_non_file_and_missing_file_are_rejected(
     workspace: tuple[WorkspaceStore, str, Path], tmp_path: Path
 ) -> None:
@@ -261,6 +310,54 @@ def test_manifest_is_immutable_and_failure_cleans_imported_bytes(
     imported = root / "workspaces" / workspace_id / "inputs" / "imported"
     assert len(list(imported.glob("*.jsonl"))) == 1
     assert not list(root.rglob("*.tmp"))
+
+
+def test_referenced_manifest_rejects_network_path_after_registration(
+    workspace: tuple[WorkspaceStore, str, Path], tmp_path: Path
+) -> None:
+    store, workspace_id, root = workspace
+    source = tmp_path / "safe-input.jsonl"
+    source.write_bytes(GT)
+    registered = register_referenced_jsonl(
+        store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+    )
+    manifest_path = (
+        root
+        / "workspaces"
+        / workspace_id
+        / "inputs"
+        / "manifests"
+        / f"{registered.manifest.input_id}.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["source_path"] = r"\\server\share\remote.jsonl"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(WorkspaceStorageError, match="source path is unsafe"):
+        store.read_input_bytes(workspace_id, registered.manifest.input_id)
+
+
+def test_referenced_input_rejects_network_redirect_at_read_time(
+    workspace: tuple[WorkspaceStore, str, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, workspace_id, _ = workspace
+    source = tmp_path / "safe-input.jsonl"
+    source.write_bytes(GT)
+    registered = register_referenced_jsonl(
+        store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+    )
+    original_resolve = Path.resolve
+
+    def redirected(path: Path, *args: object, **kwargs: object) -> Path:
+        if path == source:
+            return Path(r"\\server\share\remote.jsonl")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", redirected)
+    with pytest.raises(WorkspaceStorageError, match="source path is unsafe"):
+        store.read_input_bytes(workspace_id, registered.manifest.input_id)
 
 
 def test_referenced_file_size_is_bounded_on_registration_and_runtime(
