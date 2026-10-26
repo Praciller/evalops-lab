@@ -58,15 +58,12 @@ def _explicit_destination(raw_path: str) -> Path:
 
     if raw_path != raw_path.strip() or not raw_path.strip():
         raise ValueError("an explicit destination directory is required")
+    # Reject network and device paths before any filesystem metadata probe.
+    if raw_path.startswith(("\\\\", "//")):
+        raise ValueError("destination must be a local directory")
     destination = Path(raw_path)
-    # Exports require an explicitly selected local directory. Never resolve a
-    # UNC/device path that could contact a remote host under the app's identity.
-    if (
-        not destination.is_absolute()
-        or raw_path.startswith(("\\\\", "//"))
-        or destination.is_symlink()
-    ):
-        raise ValueError("destination must be an absolute non-symlink local directory")
+    if not destination.is_absolute() or destination.is_symlink():
+        raise ValueError("destination must be an absolute non-symlink directory")
     try:
         resolved = destination.resolve(strict=True)
     except (OSError, RuntimeError) as error:
