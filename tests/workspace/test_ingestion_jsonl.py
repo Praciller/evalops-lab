@@ -168,6 +168,54 @@ def test_unsupported_extension_is_rejected(
         )
 
 
+@pytest.mark.parametrize(
+    "unsafe_path",
+    [
+        "relative.jsonl",
+        "../relative.jsonl",
+        "//server/share/input.jsonl",
+        r"\\server\share\input.jsonl",
+    ],
+)
+def test_reference_requires_absolute_local_path(
+    workspace: tuple[WorkspaceStore, str, Path], unsafe_path: str
+) -> None:
+    store, workspace_id, root = workspace
+    with pytest.raises(InputValidationError) as caught:
+        register_referenced_jsonl(
+            store,
+            workspace_id,
+            kind=InputKind.RETRIEVAL_GROUND_TRUTH,
+            source=Path(unsafe_path),
+        )
+    assert caught.value.code == "INVALID_REFERENCE_PATH"
+    assert store.list_inputs(workspace_id) == []
+    assert not list((root / "workspaces" / workspace_id).rglob("*.jsonl"))
+
+
+def test_reference_rejects_network_target_after_resolve(
+    workspace: tuple[WorkspaceStore, str, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, workspace_id, _ = workspace
+    source = tmp_path / "local-input.jsonl"
+    source.write_bytes(GT)
+    original_resolve = Path.resolve
+
+    def redirected(path: Path, *args: object, **kwargs: object) -> Path:
+        if path == source:
+            return Path(r"\\server\share\remote.jsonl")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", redirected)
+    with pytest.raises(InputValidationError) as caught:
+        register_referenced_jsonl(
+            store, workspace_id, kind=InputKind.RETRIEVAL_GROUND_TRUTH, source=source
+        )
+    assert caught.value.code == "INVALID_REFERENCE_PATH"
+
+
 def test_reference_non_file_and_missing_file_are_rejected(
     workspace: tuple[WorkspaceStore, str, Path], tmp_path: Path
 ) -> None:

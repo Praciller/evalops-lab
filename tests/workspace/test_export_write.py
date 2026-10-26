@@ -162,7 +162,14 @@ def test_confirmation_requires_absolute_existing_directory_and_valid_request(ctx
     run_id = _run(store, ws, runner, GOOD)
     service = ExportService(store, clock=lambda: NOW)
     preview = service.preview_run(ws, run_id, _classification())
-    for invalid in ["relative/output", str(tmp / "missing"), str(tmp / "file.txt"), ""]:
+    for invalid in [
+        "relative/output",
+        str(tmp / "missing"),
+        str(tmp / "file.txt"),
+        "//server/share/export",
+        r"\\server\share\export",
+        "",
+    ]:
         if invalid == str(tmp / "file.txt"):
             (tmp / "file.txt").write_text("unchanged")
         if not invalid:
@@ -186,6 +193,23 @@ def test_confirmation_requires_absolute_existing_directory_and_valid_request(ctx
                 "publish_to_github": True,
             }
         )
+
+
+def test_network_directory_target_after_resolve_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    local_directory = tmp_path / "local-output"
+    local_directory.mkdir()
+    original_resolve = Path.resolve
+
+    def redirected(path: Path, *args: object, **kwargs: object) -> Path:
+        if path == local_directory:
+            return Path(r"\\server\share\export")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", redirected)
+    with pytest.raises(ValueError, match="resolve to a local directory"):
+        module._explicit_destination(str(local_directory))
 
 
 def test_existing_run_destination_never_overwritten(ctx) -> None:
