@@ -381,7 +381,14 @@ class WorkspaceStore:
             else:
                 if manifest.source_path is None:
                     raise WorkspaceStorageError("referenced input has no source")
-                path = Path(manifest.source_path).resolve(strict=True)
+                # Persisted metadata and filesystem redirects may change after
+                # owner registration. Re-enforce the local-path boundary here.
+                original = Path(manifest.source_path)
+                if not original.is_absolute() or str(original).startswith(("\\\\", "//")):
+                    raise WorkspaceStorageError("referenced input source path is unsafe")
+                path = original.resolve(strict=True)
+                if str(path).startswith(("\\\\", "//")):
+                    raise WorkspaceStorageError("referenced input source path is unsafe")
                 if not path.is_file():
                     raise WorkspaceStorageError("referenced input content is unavailable")
                 if path.stat().st_size > MAX_INPUT_BYTES:
