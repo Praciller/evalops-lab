@@ -24,7 +24,7 @@ $env:THAI_EXPORT = "$env:TEMP\evalops-thai-support"
 uv run --no-project --python 3.13 python scripts/import_synthetic_thai_support.py --report "$env:TEMP\support-thai-eval.json" --output-dir $env:THAI_EXPORT
 
 $env:PYTHONPATH = "$PWD\src"
-uv run --no-project --python 3.13 --with "pydantic>=2.7,<3" python -c 'from evalops.cli import main; raise SystemExit(main())' retrieval evaluate --ground-truth "$env:THAI_EXPORT\ground_truth.jsonl" --predictions "$env:THAI_EXPORT\predictions.jsonl" --k 5 --dataset-name synthetic-thai-enterprise-policy-v1 --dataset-version fixture-v1 --system-name support-thai-lexical-baseline --run-id support-thai-local --output "$env:THAI_EXPORT\evalops-run.json"
+uv run --no-project --python 3.13 --with "pydantic>=2.7,<3" python -m evalops retrieval evaluate --ground-truth "$env:THAI_EXPORT\ground_truth.jsonl" --predictions "$env:THAI_EXPORT\predictions.jsonl" --k 5 --dataset-name synthetic-thai-enterprise-policy-v1 --dataset-version fixture-v1 --system-name support-thai-lexical-baseline --run-id support-thai-local --output "$env:THAI_EXPORT\evalops-run.json"
 ```
 
 The resulting `metadata.json` records the synthetic and integration-only
@@ -40,11 +40,12 @@ remain separately recorded in the source and metadata; retrieval ranking
 metrics alone are **not** sufficient proof of access control, safe abstention,
 or LLM prompt-injection resistance.
 
-The current 8-case fixture has 5 retrieval-positive cases and 3 deliberate
-abstentions. The existing EvalOps retrieval evaluator counts all 8 input
-queries in its aggregate denominator; it therefore reports Recall@5 = 5/8
-(0.625), **not** the positive-only retrieval success rate (5/5). Assess the
-3/3 synthetic abstentions separately and never interpret the mixed-population
+The current 10-case fixture has 5 retrieval-positive cases and 5 deliberate
+abstentions, including independent scope and permission denials. The existing
+EvalOps retrieval evaluator counts all 10 input queries in its aggregate
+denominator; it therefore reports Recall@5 = 5/10 (0.5), **not** the
+positive-only retrieval success rate (5/5). Assess the 5/5 synthetic
+abstentions separately and never interpret the mixed-population
 aggregate as an estimate of real-world relevance accuracy. Compare only
 identically defined populations across runs.
 
