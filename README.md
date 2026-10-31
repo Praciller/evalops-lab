@@ -37,6 +37,8 @@ The Python CLI remains the reproducible automation surface.
 *Production Evidence Console view with provenance and scope labels visible. The
 public comparison data is `SYNTHETIC_FIXTURE` / `INTEGRATION_ONLY`.*
 
+**Cross-project integration:** [Thai Support RAG → EvalOps](docs/support-thai-integration.md) converts a strictly synthetic, offline Thai policy retrieval run to the existing EvalOps retrieval contract. Permission-safe and abstention checks remain separately labeled; no live customer records or external inference are involved.
+
 ## Review EvalOps Lab in 90 seconds
 
 1. **[Overview](https://praciller.github.io/evalops-lab/)** — verify that the
