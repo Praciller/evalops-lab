@@ -32,6 +32,20 @@ export function Overview() {
           <div className="surface p-4 text-sm leading-6 text-muted"><strong className="text-ink">Read-only boundary.</strong> This static site does not run evaluators, call model providers, fetch data, or expose raw responses.</div>
         </section>
 
+        {comparisons[0] && (
+          <section className="surface p-5" aria-labelledby="start-here-title">
+            <p className="eyebrow">A guided look</p>
+            <h2 id="start-here-title" className="section-title">Start here</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">Follow a synthetic example from an aggregate regression to the changed records, then inspect the decision rules and tests run in CI.</p>
+            <ol className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-accent">
+              <li><Link className="focus-ring rounded underline underline-offset-4" href={`/comparisons/${comparisons[0].comparison.artifact_id}/`}>1. Regression comparison</Link></li>
+              <li><Link className="focus-ring rounded underline underline-offset-4" href={`/comparisons/${comparisons[0].comparison.artifact_id}/failures/`}>2. Record changes</Link></li>
+              <li><a className="focus-ring rounded underline underline-offset-4" href="https://github.com/Praciller/evalops-lab/blob/main/tests/test_regression.py">3. Decision tests in CI</a></li>
+            </ol>
+            <p className="mt-3 text-xs leading-5 text-muted">CI runs these tests; the public example is not itself a live CI gate or an official benchmark result.</p>
+          </section>
+        )}
+
         <section className="grid gap-3 sm:grid-cols-3" aria-label="Evidence catalog summary">
           <SummaryCard label="Approved artifacts" value={String(index.artifacts.length)} detail="Explicit index membership" />
           <SummaryCard label="Run artifacts" value={String(runs.length)} detail="Available for inspection" />
