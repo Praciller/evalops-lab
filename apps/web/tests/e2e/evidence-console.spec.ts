@@ -85,6 +85,45 @@ test("product shell navigates catalogs and marks the active app route", async ({
   await expect(page.getByRole("heading", { name: "Comparisons" })).toBeVisible();
 });
 
+test("navigation works after opening detail pages directly", async ({ page }) => {
+  const detailPaths = [
+    "/runs/demo-retrieval-fixture-v1/",
+    "/comparisons/demo-retrieval-regression-v1/",
+    "/comparisons/demo-retrieval-regression-v1/failures/",
+  ];
+  const destinations = [
+    { label: "Overview", path: "/", heading: "Evidence Console" },
+    { label: "Runs", path: "/runs/", heading: "Runs" },
+    { label: "Comparisons", path: "/comparisons/", heading: "Comparisons" },
+  ];
+  for (const detailPath of detailPaths) {
+    for (const destination of destinations) {
+      await page.goto(`${appBasePath}${detailPath}`);
+      await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: destination.label, exact: true }).click();
+      await expect(page).toHaveURL(`http://127.0.0.1:${localPort}${appBasePath}${destination.path}`);
+      await expect(page.getByRole("heading", { name: destination.heading, exact: true })).toBeVisible();
+    }
+    if (process.env.PAGES_MODE === "true") {
+      await page.goto(`${appBasePath}${detailPath}`);
+      await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Storybook", exact: true }).click();
+      await expect(page).toHaveURL(`http://127.0.0.1:${localPort}${appBasePath}/storybook/`);
+      await expect(page).toHaveTitle(/storybook/i);
+    }
+  }
+});
+
+test("start here links to the regression, record changes, and decision tests", async ({ page }) => {
+  await page.goto(homePath);
+  const guide = page.getByRole("region", { name: "Start here" });
+  await expect(guide.getByText(/synthetic example/)).toBeVisible();
+  await expect(guide.getByRole("link", { name: /Decision tests in CI/ })).toHaveAttribute("href", "https://github.com/Praciller/evalops-lab/blob/main/tests/test_regression.py");
+  await guide.getByRole("link", { name: /Regression comparison/ }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:${localPort}${appBasePath}/comparisons/demo-retrieval-regression-v1/`);
+  await page.goto(homePath);
+  await guide.getByRole("link", { name: /Record changes/ }).click();
+  await expect(page.getByRole("heading", { name: "Record change explorer" })).toBeVisible();
+});
+
 test("product shell remains usable at the mobile catalog breakpoint", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(homePath);
