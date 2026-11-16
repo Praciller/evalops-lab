@@ -167,6 +167,10 @@ its regression result is integration evidence, not an official benchmark.*
 
 ## Reviewer quickstart
 
+For an end-to-end check of the public routes and private Workspace, use the
+[repository verification workflow](.agents/skills/verify-evalops/SKILL.md) and
+its [reviewer feature map](.agents/skills/verify-evalops/references/features/README.md).
+
 From a clean checkout, the deterministic offline path requires no paid service,
 provider credential, or full external dataset:
 
