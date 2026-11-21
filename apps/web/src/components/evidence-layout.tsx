@@ -1,7 +1,13 @@
 import { ProductHeader } from "@/components/shell/product-header";
 
-export function EvidenceLayout({ children }: { children: React.ReactNode }) {
-  const storybookHref = process.env.GITHUB_PAGES === "true" ? "/evalops-lab/storybook/" : "/storybook/";
+export function EvidenceLayout({
+  children,
+  storybookHref: providedStorybookHref,
+}: {
+  children: React.ReactNode;
+  storybookHref?: string;
+}) {
+  const storybookHref = providedStorybookHref ?? (process.env.GITHUB_PAGES === "true" ? "/evalops-lab/storybook/" : "/storybook/");
 
   return (
     <div className="min-h-screen bg-canvas text-ink">

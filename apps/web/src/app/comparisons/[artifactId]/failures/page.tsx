@@ -11,5 +11,6 @@ export function generateStaticParams() {
 
 export default async function FailureExplorerPage({ params }: { params: Promise<{ artifactId: string }> }) {
   const { artifactId } = await params;
-  return <FailureExplorer bundle={getComparisonBundle(artifactId)} />;
+  const storybookHref = process.env.GITHUB_PAGES === "true" ? "/evalops-lab/storybook/" : "/storybook/";
+  return <FailureExplorer bundle={getComparisonBundle(artifactId)} storybookHref={storybookHref} />;
 }

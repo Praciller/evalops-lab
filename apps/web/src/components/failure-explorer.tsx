@@ -23,11 +23,17 @@ const transitionLabels: Record<FailureTransitionKind, string> = {
   CHANGED_FAILURE_CATEGORY: "Changed failure category",
 };
 
-export function FailureExplorer({ bundle }: { bundle: ComparisonBundle }) {
+export function FailureExplorer({
+  bundle,
+  storybookHref,
+}: {
+  bundle: ComparisonBundle;
+  storybookHref: string;
+}) {
   const transitionResult = buildFailureTransitions(bundle.baseline, bundle.candidate);
   if (transitionResult.status === "UNAVAILABLE") {
     return (
-      <EvidenceLayout>
+      <EvidenceLayout storybookHref={storybookHref}>
         <section className="surface border-danger/40 p-6" role="alert" aria-labelledby="unavailable-title">
           <p className="eyebrow text-danger">Evidence boundary</p>
           <h1 id="unavailable-title" className="mt-2 text-2xl font-semibold text-ink">Record-level comparison unavailable</h1>
@@ -37,10 +43,18 @@ export function FailureExplorer({ bundle }: { bundle: ComparisonBundle }) {
     );
   }
 
-  return <AvailableExplorer bundle={bundle} rows={transitionResult.rows} />;
+  return <AvailableExplorer bundle={bundle} rows={transitionResult.rows} storybookHref={storybookHref} />;
 }
 
-function AvailableExplorer({ bundle, rows }: { bundle: ComparisonBundle; rows: FailureTransitionRow[] }) {
+function AvailableExplorer({
+  bundle,
+  rows,
+  storybookHref,
+}: {
+  bundle: ComparisonBundle;
+  rows: FailureTransitionRow[];
+  storybookHref: string;
+}) {
   const [transition, setTransition] = useState<FailureTransitionKind | "ALL">("ALL");
   const [candidateCategory, setCandidateCategory] = useState("ALL");
   const [changedOnly, setChangedOnly] = useState(false);
@@ -57,7 +71,7 @@ function AvailableExplorer({ bundle, rows }: { bundle: ComparisonBundle; rows: F
   ));
 
   return (
-    <EvidenceLayout>
+    <EvidenceLayout storybookHref={storybookHref}>
       <div className="space-y-8">
         <nav aria-label="Breadcrumb" className="text-sm">
           <Link className="focus-ring rounded text-accent underline underline-offset-4 hover:no-underline" href={`/comparisons/${bundle.comparison.artifact_id}/`}>Comparison</Link>

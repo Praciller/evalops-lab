@@ -202,7 +202,7 @@ describe("Evidence Console components", () => {
   });
 
   it("renders introduced failure and persistent category without overstating abstention", () => {
-    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} />);
+    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} storybookHref="/storybook/" />);
     expect(screen.getByText("THQA-004")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Introduced failure" })).toBeInTheDocument();
     expect(screen.getByText("THQA-002")).toBeInTheDocument();
@@ -214,7 +214,7 @@ describe("Evidence Console components", () => {
   });
 
   it("filters to changed records and supports record search", () => {
-    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} />);
+    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} storybookHref="/storybook/" />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Changed records only" }));
     expect(screen.queryByText("THQA-001")).not.toBeInTheDocument();
     expect(screen.queryByText("THQA-002")).not.toBeInTheDocument();
@@ -226,7 +226,7 @@ describe("Evidence Console components", () => {
   });
 
   it("keeps unchanged persistent categories visible when changed-only is disabled", () => {
-    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} />);
+    render(<FailureExplorer bundle={getComparisonBundle("demo-retrieval-regression-v1")} storybookHref="/storybook/" />);
     expect(screen.getByText("THQA-002")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Persistent category" })).toBeInTheDocument();
   });
@@ -234,9 +234,19 @@ describe("Evidence Console components", () => {
   it("renders an unavailable state instead of partially joining record populations", () => {
     const bundle = structuredClone(getComparisonBundle("demo-retrieval-regression-v1"));
     bundle.candidate.evidence.pop();
-    render(<FailureExplorer bundle={bundle} />);
+    render(<FailureExplorer bundle={bundle} storybookHref="/storybook/" />);
     expect(screen.getByRole("heading", { name: "Record-level comparison unavailable" })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Changed records only" })).not.toBeInTheDocument();
+  });
+
+  it("uses the Pages Storybook path supplied to the client explorer", () => {
+    render(
+      <FailureExplorer
+        bundle={getComparisonBundle("demo-retrieval-regression-v1")}
+        storybookHref="/evalops-lab/storybook/"
+      />,
+    );
+    expect(screen.getByRole("link", { name: "Storybook" })).toHaveAttribute("href", "/evalops-lab/storybook/");
   });
 
   it("renders all three claim dimensions as text badges", () => {
