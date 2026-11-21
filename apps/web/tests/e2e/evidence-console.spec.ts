@@ -105,7 +105,9 @@ test("navigation works after opening detail pages directly", async ({ page }) =>
     }
     if (process.env.PAGES_MODE === "true") {
       await page.goto(`${appBasePath}${detailPath}`);
-      await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Storybook", exact: true }).click();
+      const storybookLink = page.getByRole("navigation", { name: "Primary navigation" }).getByRole("link", { name: "Storybook", exact: true });
+      await expect(storybookLink).toHaveAttribute("href", `${appBasePath}/storybook/`);
+      await storybookLink.click();
       await expect(page).toHaveURL(`http://127.0.0.1:${localPort}${appBasePath}/storybook/`);
       await expect(page).toHaveTitle(/storybook/i);
     }
