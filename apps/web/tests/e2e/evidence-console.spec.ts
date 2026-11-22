@@ -9,6 +9,12 @@ const appBasePath = process.env.PAGES_MODE === "true" ? "/evalops-lab" : "";
 const localPort = process.env.PAGES_MODE === "true" ? 4174 : 4173;
 const homePath = appBasePath ? `${appBasePath}/` : "/";
 
+// Keep mobile screenshot baselines scoped to the rendering platform.
+function mobileSnapshotName(name: string) {
+  const { name: baseName, ext } = path.parse(name);
+  return `${baseName}${process.platform === "win32" ? "-win32" : ""}${ext}`;
+}
+
 async function tabUntilFocused(page: import("@playwright/test").Page, locator: import("@playwright/test").Locator, maxTabs = 20) {
   for (let index = 0; index < maxTabs; index += 1) {
     await page.keyboard.press("Tab");
@@ -46,7 +52,7 @@ test("overview remains usable on mobile and keyboard focus is visible", async ({
   await page.keyboard.press("Tab");
   await expect(page.locator(":focus")).toHaveAttribute("href", `${appBasePath}/`);
   await page.screenshot({ path: path.join(screenshotsDir, "overview-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("overview-mobile.png", {
+  await expect(page).toHaveScreenshot(mobileSnapshotName("overview-mobile.png"), {
     clip: mobileClip,
     // Hosted Linux Chromium measured 10,596 stable differing pixels on this fixed 390x844 clip.
     maxDiffPixelRatio: 0.04,
@@ -133,7 +139,7 @@ test("product shell remains usable at the mobile catalog breakpoint", async ({ p
   await expect(page.getByRole("link", { name: "Storybook", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Dark theme" })).toBeVisible();
   await page.screenshot({ path: path.join(screenshotsDir, "shell-mobile.png"), fullPage: true });
-  await expect(page).toHaveScreenshot("shell-mobile.png", {
+  await expect(page).toHaveScreenshot(mobileSnapshotName("shell-mobile.png"), {
     clip: mobileClip,
     // This shares the overview capture's hosted Linux font/rasterization delta.
     maxDiffPixelRatio: 0.04,
